@@ -8,60 +8,60 @@
 
 // Arduino defines
 #define STEP_CLOCKWISE    HIGH      // the value to set the dir_pin to when changing direction
-#define STEP_REVERSE    LOW
-#define DIR_PIN         13
-#define STEP_PIN        12
-#define ENABLE_PIN      11      //goes LOW to enable
+#define STEP_REVERSE      LOW
+#define DIR_PIN           13
+#define STEP_PIN          12
+#define ENABLE_PIN        11    //goes LOW to enable
 
 // motorState constants
-#define STOPPED         0      //also used as operation state
-#define ACCELERATING    1
-#define RUNNING         2
-#define DECELERATING    3
+#define STOPPED           0    //also used as operation state
+#define ACCELERATING      1
+#define RUNNING           2
+#define DECELERATING      3
 
 // operation state constants
 // #define STOPPED              0 //defined already
-#define RUNNING_AUTO         1
-#define RUNNING_MAN          2
+#define RUNNING_AUTO          1
+#define RUNNING_MAN           2
 
-#define STEPS_PER_DEGREE     273.6 // 76 * 360 / 100
+#define STEPS_PER_DEGREE      273.6 // 76 * 360 / 100
 
-#define BUTTON_ADC_PIN       A0    // A0 is the button ADC input
-#define LCD_BACKLIGHT_PIN    10    // D10 controls LCD backlight
+#define BUTTON_ADC_PIN        A0    // A0 is the button ADC input
+#define LCD_BACKLIGHT_PIN     10    // D10 controls LCD backlight
 // ADC readings expected for the 5 buttons on the ADC input
-#define RIGHT_10BIT_ADC      0     // right
-#define UP_10BIT_ADC         100   // up
-#define DOWN_10BIT_ADC       256   // down
-#define LEFT_10BIT_ADC       408   // left
-#define SELECT_10BIT_ADC     640   // right
-#define BUTTONHYSTERESIS     40    // hysteresis for valid button sensing window
+#define RIGHT_10BIT_ADC       0     // right
+#define UP_10BIT_ADC          100   // up
+#define DOWN_10BIT_ADC        256   // down
+#define LEFT_10BIT_ADC        408   // left
+#define SELECT_10BIT_ADC      640   // right
+#define BUTTONHYSTERESIS      40    // hysteresis for valid button sensing window
 //return values for readButtons()
-#define BUTTON_TOPLEFT        0 //
-#define BUTTON_TOPRIGHT       1 //
-#define BUTTON_BOTTOMLEFT     2 //
-#define BUTTON_BOTTOMRIGHT    3 //
-#define BUTTON_SELECT         4 //
-#define BUTTON_NONE           5                               //
+#define BUTTON_TOPLEFT        0     //
+#define BUTTON_TOPRIGHT       1     //
+#define BUTTON_BOTTOMLEFT     2     //
+#define BUTTON_BOTTOMRIGHT    3     //
+#define BUTTON_SELECT         4     //
+#define BUTTON_NONE           5     //
 //some example macros with friendly labels for LCD backlight/pin control, tested and can be swapped into the example code as you like
 #define LCD_BACKLIGHT_OFF()     digitalWrite(LCD_BACKLIGHT_PIN, LOW)
 #define LCD_BACKLIGHT_ON()      digitalWrite(LCD_BACKLIGHT_PIN, HIGH)
 #define LCD_BACKLIGHT(state)    { if (state) { digitalWrite(LCD_BACKLIGHT_PIN, HIGH); }else{ digitalWrite(LCD_BACKLIGHT_PIN, LOW); } }
 // directions
-#define CLOCKWISE    0
-#define COUNTERCW    1
+#define CLOCKWISE         0
+#define COUNTERCW         1
 // Menus
 #define RUN_MENU          0
 #define MAIN_MENU         1
 #define SETUP_MENU        2
 #define DIRECTION_MENU    3
-#define MOTOR_MENU     4
+#define MOTOR_MENU        4
 #define SPEED_MENU        5
 #define ACCEL_MENU        6
 #define STEPS_MENU        7
 #define MANUAL_MENU       8
 
-#define CLICKABLE        true
-#define NOT_CLICKABLE    false
+#define CLICKABLE         true
+#define NOT_CLICKABLE     false
 
 
 /*--------------------------------------------------------------------------------------
@@ -88,8 +88,8 @@ volatile unsigned int stepDirection;     //HIGH and LOW are u_ints
 volatile int          stepNumber;
 volatile int          stepTarget;
 volatile bool         leadingEdge;
-int                   shotsPerRev;
-int                   currentShot;
+int shotsPerRev;
+int currentShot;
 
 //--------------------------------------------------------------------------------------
 // Init the LCD library with the LCD pins to be used
@@ -101,58 +101,68 @@ byte currentMenu = MAIN_MENU;
 
 void toggleMotor()
 {
-    if (motorState == STOPPED)
+    if (motorSpeed == 0)
     {
-        motorState = ACCELERATING;
         if (currentMenu == RUN_MENU)
         {
             operationState = RUNNING_AUTO;
+            targetSpeed = maxSpeed;
         }
         else
         {
             operationState = RUNNING_MAN;
+            targetSpeed = maxSpeed;
         }
     }
     else
     {
-        motorState = DECELERATING;
+        targetSpeed = 0;
     }
 }
 
 void stopMotor()
 {
-    if (motorState != STOPPED)
+    if (motorSpeed != 0)
     {
-        motorState = DECELERATING;
+        targetSpeed = 0;
     }
 }
 
-
 // blank menuItem
 MenuItem blankMI;
-UIItem blankUII;
+UIItem   blankUII;
 // 0 - runMenu ------------------------------------
 // runMenu buttons
 const char lMenu[] = "Menu ";
-MenuItem mainMenuBtn(lMenu , []() {currentMenu = MAIN_MENU;}, CLICKABLE);
+MenuItem   mainMenuBtn(lMenu, []() {
+                       currentMenu = MAIN_MENU;
+    }, CLICKABLE);
 const char lSTART[] = "START";
-const char lSTOP[] = " STOP";
-MenuItem startBtn(lSTART, toggleMotor, [](){return((motorState)? lSTOP  : lSTART);}, CLICKABLE); // motorState > 0 means running
-MenuItem shotCounter("12345", [](){return("54321");}); //TODO frame counter
-MenuItem shotsIndicator("12345", [](){return("54321");}); //TODO frame counter
+const char lSTOP[]  = " STOP";
+MenuItem   startBtn(lSTART, toggleMotor, []() {
+                    return((motorState) ? lSTOP  : lSTART);//TODO motor state in main loop
+    }, CLICKABLE);                                                                               // motorState > 0 means running
+MenuItem shotCounter("12345", []() {
+                     return("54321");
+    });                                                //TODO frame counter
+MenuItem shotsIndicator("12345", []() {
+                        return("54321");
+    });                                                   //TODO frame counter
 MenuItem *runMenuButtons[4] =
 {
-  &mainMenuBtn,
-  &startBtn,
-  &shotCounter,
-  &shotsIndicator
+    &mainMenuBtn,
+    &startBtn,
+    &shotCounter,
+    &shotsIndicator
 };
 // runMenu UIItems
 const char motorIndicatorFrames[8][STRING_LENGTH] = { " ||  ", " <+  ", " +>  ", " <=  ", " =>  ", " <-  ", " ->  " };
-UIItem motorStateIndicator(motorIndicatorFrames[0], []() {return(motorIndicatorFrames[motorState * (1 + direction)]);});
+UIItem     motorStateIndicator(motorIndicatorFrames[0], []() {
+                               return(motorIndicatorFrames[motorState * (1 + direction)]);
+    });
 const char lSlash[] = "  /  ";
-UIItem slash(lSlash);
-UIItem *runMenuUIItems[2] =
+UIItem     slash(lSlash);
+UIItem *   runMenuUIItems[2] =
 {
     &motorStateIndicator,
     &slash
@@ -167,24 +177,30 @@ Menu runMenu
 // 1 - mainMenu ------------------------------------
 // mainMenu buttons
 const char lAuto[] = "Auto ";
-MenuItem runMenuBtn(lAuto , []() {currentMenu = RUN_MENU;}, CLICKABLE);
+MenuItem   runMenuBtn(lAuto, []() {
+                      currentMenu = RUN_MENU;
+    }, CLICKABLE);
 const char lMan[] = "  Man";
-MenuItem manualMenuBtn(lMan, []() {currentMenu = MANUAL_MENU;}, CLICKABLE);
+MenuItem   manualMenuBtn(lMan, []() {
+                         currentMenu = MANUAL_MENU;
+    }, CLICKABLE);
 const char lSetup[] = "Setup";
-MenuItem setupMenuBtn(lSetup, []() {currentMenu = SETUP_MENU;}, CLICKABLE);
+MenuItem   setupMenuBtn(lSetup, []() {
+                        currentMenu = SETUP_MENU;
+    }, CLICKABLE);
 
 MenuItem *mainMenuButtons[4] =
 {
-  &runMenuBtn,
-  &manualMenuBtn,
-  &setupMenuBtn,
-  &blankMI
+    &runMenuBtn,
+    &manualMenuBtn,
+    &setupMenuBtn,
+    &blankMI
 };
 // mainMenu UIItems
 UIItem *mainMenuUIItems[2] =
 {
-  &blankUII,
-  &blankUII
+    &blankUII,
+    &blankUII
 };
 Menu mainMenu
 (
@@ -196,11 +212,17 @@ Menu mainMenu
 // 2 - setupMenu ------------------------------------
 // setupMenu buttons
 const char lMotr[] = "Motor";
-MenuItem motorMenuBtn(lMotr, []() {currentMenu = MOTOR_MENU;}, CLICKABLE);
+MenuItem   motorMenuBtn(lMotr, []() {
+                        currentMenu = MOTOR_MENU;
+    }, CLICKABLE);
 const char lDir[] = "Dir  ";
-MenuItem directionMenuBtn(lDir  , []() {currentMenu = DIRECTION_MENU;}, CLICKABLE);
+MenuItem   directionMenuBtn(lDir, []() {
+                            currentMenu = DIRECTION_MENU;
+    }, CLICKABLE);
 const char lSteps[] = "Shots";
-MenuItem stepsMenuBtn(lSteps, []() {currentMenu = STEPS_MENU;}, CLICKABLE);
+MenuItem   stepsMenuBtn(lSteps, []() {
+                        currentMenu = STEPS_MENU;
+    }, CLICKABLE);
 
 MenuItem *setupMenuButtons[4] =
 {
@@ -212,11 +234,11 @@ MenuItem *setupMenuButtons[4] =
 
 // setupMenu UIItems
 const char lset[] = "set  ";
-UIItem setupMnuLabel(lset);
-UIItem *setupMenuUIItems[2] =
+UIItem     setupMnuLabel(lset);
+UIItem *   setupMenuUIItems[2] =
 {
-  &setupMnuLabel,
-  &blankUII
+    &setupMnuLabel,
+    &blankUII
 };
 Menu setupMenu
 (
@@ -228,11 +250,17 @@ Menu setupMenu
 // 3 - directionMenu ------------------------------------
 // directionMenu buttons
 const char lBack[] = "<Back";
-MenuItem backSetupBtn(lBack, []() {currentMenu = SETUP_MENU;}, CLICKABLE);
+MenuItem   backSetupBtn(lBack, []() {
+                        currentMenu = SETUP_MENU;
+    }, CLICKABLE);
 const char lCW[] = "[<]  ";
-MenuItem dirCWBtn(lCW  , []() {direction = CLOCKWISE;}, CLICKABLE);
+MenuItem   dirCWBtn(lCW, []() {
+                    direction = CLOCKWISE;
+    }, CLICKABLE);
 const char lCCW[] = "  [>]";
-MenuItem dirCCBtn(lCCW, []() {direction = COUNTERCW;}, CLICKABLE);
+MenuItem   dirCCBtn(lCCW, []() {
+                    direction = COUNTERCW;
+    }, CLICKABLE);
 
 MenuItem *directionMenuButtons[4] =
 {
@@ -243,15 +271,17 @@ MenuItem *directionMenuButtons[4] =
 };
 // directionMenu UIItems
 const char ldir[] = " dir ";
-UIItem dirMenuLabel(ldir);
-const char dirIndicatorFrames[2][STRING_LENGTH] = {"<-CW-", "CCW->"};
-UIItem directionIndicator(
-  dirIndicatorFrames[direction], [](){return(dirIndicatorFrames[direction]);});
+UIItem     dirMenuLabel(ldir);
+const char dirIndicatorFrames[2][STRING_LENGTH] = { "<-CW-", "CCW->" };
+UIItem     directionIndicator(
+    dirIndicatorFrames[direction], []() {
+    return(dirIndicatorFrames[direction]);
+    });
 UIItem *directionMenuUIItems[2] = {
-  &dirMenuLabel,
-  &directionIndicator
+    &dirMenuLabel,
+    &directionIndicator
 };
-Menu directionMenu
+Menu    directionMenu
 (
     directionMenuButtons,
     directionMenuUIItems,
@@ -261,9 +291,13 @@ Menu directionMenu
 // 4 - motorMenu ------------------------------------
 // motorMenu buttons
 const char lSpeed[] = "Speed";
-MenuItem speedMenuBtn(lSpeed, []() {currentMenu = SPEED_MENU;}, CLICKABLE);
+MenuItem   speedMenuBtn(lSpeed, []() {
+                        currentMenu = SPEED_MENU;
+    }, CLICKABLE);
 const char lAccel[] = "Accel";
-MenuItem accelMenuBtn(lAccel, []() {currentMenu = ACCEL_MENU;}, CLICKABLE);
+MenuItem   accelMenuBtn(lAccel, []() {
+                        currentMenu = ACCEL_MENU;
+    }, CLICKABLE);
 
 MenuItem *motorMenuButtons[4] =
 {
@@ -274,12 +308,12 @@ MenuItem *motorMenuButtons[4] =
 };
 // motorMenu UIItems
 const char lmotor[] = "motor";
-UIItem motorMenuLabel(lmotor);
-UIItem *motorMenuUIItems[2] = {
-  &motorMenuLabel,
-  &blankUII
+UIItem     motorMenuLabel(lmotor);
+UIItem *   motorMenuUIItems[2] = {
+    &motorMenuLabel,
+    &blankUII
 };
-Menu motorMenu
+Menu       motorMenu
 (
     motorMenuButtons,
     motorMenuUIItems,
@@ -289,11 +323,17 @@ Menu motorMenu
 // 5 - speed ------------------------------------
 // speedMenu buttons
 // const char lBack[] = "<Back";
-MenuItem backMtrBtn(lBack, []() {currentMenu = MOTOR_MENU;}, CLICKABLE);
+MenuItem backMtrBtn(lBack, []() {
+                    currentMenu = MOTOR_MENU;
+    }, CLICKABLE);
 const char lMINUS[] = "[-]  ";
-MenuItem slowDownBtn(lMINUS, []() {slowDown();}, CLICKABLE);
+MenuItem   slowDownBtn(lMINUS, []() {
+                       slowDown();
+    }, CLICKABLE);
 const char lPLUS[] = "  [+]";
-MenuItem speedUpBtn(lPLUS, []() {speedUp();}, CLICKABLE);
+MenuItem   speedUpBtn(lPLUS, []() {
+                      speedUp();
+    }, CLICKABLE);
 
 MenuItem *speedMenuButtons[4] =
 {
@@ -304,13 +344,15 @@ MenuItem *speedMenuButtons[4] =
 };
 // speedMenu UIItems
 const char lspeedmnu[] = "speed";
-UIItem speedMenuLabel(lspeedmnu);
-UIItem speedIndicator("12345", [](){return("12345");}); //TODO sprintf function
+UIItem     speedMenuLabel(lspeedmnu);
+UIItem     speedIndicator("12345", []() {
+                          return("12345");
+    });                                                   //TODO sprintf function
 UIItem *speedMenuUIItems[2] = {
-  &speedMenuLabel,
-  &speedIndicator
+    &speedMenuLabel,
+    &speedIndicator
 };
-Menu speedMenu
+Menu    speedMenu
 (
     speedMenuButtons,
     speedMenuUIItems,
@@ -322,9 +364,13 @@ Menu speedMenu
 // const char lBack[] = "<Back";
 // MenuItem backMtrBtn(lBack, []() {currentMenu = MOTOR_MENU;}, CLICKABLE);
 // const char lMINUS[] = "[ - ]";
-MenuItem accelIncreaseBtn(lMINUS  , []() {rampSteps = (rampSteps>1)?rampSteps-1:1;}, CLICKABLE);
+MenuItem accelIncreaseBtn(lMINUS, []() {
+                          rampSteps = (rampSteps > 1) ? rampSteps - 1 : 1;
+    }, CLICKABLE);
 // const char lPLUS[] = "[ + ]";
-MenuItem accelDecreaseBtn(lPLUS, []() {rampSteps++;}, CLICKABLE);
+MenuItem accelDecreaseBtn(lPLUS, []() {
+                          rampSteps++;
+    }, CLICKABLE);
 
 MenuItem *accelMenuButtons[4] =
 {
@@ -335,13 +381,15 @@ MenuItem *accelMenuButtons[4] =
 };
 // accelMenu UIItems
 const char laccelmnu[] = "accel";
-UIItem accelMenuLabel(laccelmnu);
-UIItem accelIndicator("12345", [](){return("12345");}); //TODO sprintf function
+UIItem     accelMenuLabel(laccelmnu);
+UIItem     accelIndicator("12345", []() {
+                          return("12345");
+    });                                                   //TODO sprintf function
 UIItem *accelMenuUIItems[2] = {
-  &accelMenuLabel,
-  &accelIndicator
+    &accelMenuLabel,
+    &accelIndicator
 };
-Menu accelMenu
+Menu    accelMenu
 (
     accelMenuButtons,
     accelMenuUIItems,
@@ -353,9 +401,13 @@ Menu accelMenu
 // const char lBack[] = "<Back";
 // MenuItem backMtrBtn(lBack, []() {currentMenu = MOTOR_MENU;}, CLICKABLE);
 // const char lMINUS[] = "[ - ]";
-MenuItem shotsIncreaseBtn(lMINUS  , []() {shotsPerRev = (shotsPerRev>1)?shotsPerRev-1:1;}, CLICKABLE);
+MenuItem shotsIncreaseBtn(lMINUS, []() {
+                          shotsPerRev = (shotsPerRev > 1) ? shotsPerRev - 1 : 1;
+    }, CLICKABLE);
 // const char lPLUS[] = "[ + ]";
-MenuItem shotsDecreaseBtn(lPLUS, []() {shotsPerRev = (shotsPerRev<=3600)?shotsPerRev+1:3600;}, CLICKABLE);
+MenuItem shotsDecreaseBtn(lPLUS, []() {
+                          shotsPerRev = (shotsPerRev <= 3600) ? shotsPerRev + 1 : 3600;
+    }, CLICKABLE);
 
 MenuItem *shotsMenuButtons[4] =
 {
@@ -366,13 +418,15 @@ MenuItem *shotsMenuButtons[4] =
 };
 // shotsMenu UIItems
 const char lshotsmnu[] = "shots";
-UIItem shotsMenuLabel(lshotsmnu);
-UIItem shotsIndicatorUI("12345", [](){return("12345");}); //TODO sprintf function
+UIItem     shotsMenuLabel(lshotsmnu);
+UIItem     shotsIndicatorUI("12345", []() {
+                            return("12345");
+    });                                                     //TODO sprintf function
 UIItem *shotsMenuUIItems[2] = {
-  &shotsMenuLabel,
-  &shotsIndicatorUI
+    &shotsMenuLabel,
+    &shotsIndicatorUI
 };
-Menu shotsMenu
+Menu    shotsMenu
 (
     shotsMenuButtons,
     shotsMenuUIItems,
@@ -386,47 +440,53 @@ Menu shotsMenu
 // const char lSTOP[] = "STOP ";
 MenuItem stopBtn(lSTOP, stopMotor, CLICKABLE);
 // if running CW speed up, if CCW slow down, otherwise start running CW
-MenuItem runCWBtn(lCW, [](){
-  if(motorState){
-    if (direction == CLOCKWISE)
-    {
-        speedUp();
-    }
-    else
-    {
-        slowDown();
-    }
-  } else {
-    direction=CLOCKWISE;
-    toggleMotor();
-  }
-}, CLICKABLE);
+MenuItem runCWBtn(lCW, []() {
+                  if (motorState)
+                  {
+                      if (direction == CLOCKWISE)
+                      {
+                          speedUp();
+                      }
+                      else
+                      {
+                          slowDown();
+                      }
+                  }
+                  else
+                  {
+                      direction = CLOCKWISE;
+                      toggleMotor();
+                  }
+    }, CLICKABLE);
 //if running CCW speed up, if CW slow down, otherwise start running CCW
-MenuItem runCCWBtn(lCCW, [](){
-  if(motorState){
-    if (direction == COUNTERCW)
-    {
-        speedUp();
-    }
-    else
-    {
-        slowDown();
-    }
-  } else {
-    direction=COUNTERCW;
-    toggleMotor();
-  }
-}, CLICKABLE);
+MenuItem runCCWBtn(lCCW, []() {
+                   if (motorState)
+                   {
+                       if (direction == COUNTERCW)
+                       {
+                           speedUp();
+                       }
+                       else
+                       {
+                           slowDown();
+                       }
+                   }
+                   else
+                   {
+                       direction = COUNTERCW;
+                       toggleMotor();
+                   }
+    }, CLICKABLE);
 MenuItem *manMenuButtons[4] =
 {
-  &mainMenuBtn,
-  &stopBtn,
-  &runCWBtn,
-  &runCCWBtn,
+    &mainMenuBtn,
+    &stopBtn,
+    &runCWBtn,
+    &runCCWBtn,
 };
 // manMenu UIItems
 const char lmanMnu[] = "man  ";
-UIItem manMenuLabel(lmanMnu);
+UIItem     manMenuLabel(lmanMnu);
 // const char motorIndicatorFrames[8][STRING_LENGTH] = { " ||  ", " <+  ", " +>  ", " <=  ", " =>  ", " <-  ", " ->  " };
 // UIItem motorStateIndicator(motorIndicatorFrames[0], []() {return(motorIndicatorFrames[motorState * (1 + direction)]);});
 UIItem *manMenuUIItems[2] =
@@ -444,15 +504,15 @@ Menu manMenu
 
 // --------------------------------------------------------------------------------------------------------------------------
 Menu *allTheMenus[9] = {
-  &runMenu,
-  &mainMenu,
-  &setupMenu,
-  &directionMenu,
-  &motorMenu,
-  &speedMenu,
-  &accelMenu,
-  &shotsMenu,
-  &manMenu
+    &runMenu,
+    &mainMenu,
+    &setupMenu,
+    &directionMenu,
+    &motorMenu,
+    &speedMenu,
+    &accelMenu,
+    &shotsMenu,
+    &manMenu
 };
 
 void setup()
@@ -480,28 +540,31 @@ void setup()
 
 void loop()
 {
-  // Serial.println(currentMenu);
+    // Serial.println(currentMenu);
     allTheMenus[currentMenu]->display();
     button = readButtons();
     if (buttonJustPressed)
     {
-      Serial.println(String("button: "+String(button)));//debug
-      allTheMenus[currentMenu]->click(button);
+        Serial.println(String("button: " + String(button)));//debug
+        allTheMenus[currentMenu]->click(button);
     }
-    if (motorState) {
-    // Running
-            digitalWrite(DIR_PIN, stepDirection);
-    } else {
-    // STOPPED
-            stepNumber = 0;
+    if (motorState)
+    {
+        // Running
+        digitalWrite(DIR_PIN, stepDirection);
     }
-    delay (10);
+    else
+    {
+        // STOPPED
+        stepNumber = 0;
+    }
+    delay(10);
 }
 
-// timer interrupt handler
+// timer interrupt handler - where the business logic happens
 ISR(TIMER1_COMPA_vect)
 {
-    if (motorState != STOPPED)
+    if (motorSpeed > 0)
     {
         // leading edge of the step cycle
         if (leadingEdge)
@@ -510,60 +573,47 @@ ISR(TIMER1_COMPA_vect)
             digitalWrite(STEP_PIN, HIGH);
             // we've taken a new step
             stepNumber++;
-            if (stepNumber == stepTarget - rampSteps)
+            if (stepNumber >= stepTarget - rampSteps) && (operationState == RUNNING_AUTO)
             {
-                motorState = DECELERATING;
+                targetSpeed = 0;
             }
             // check speed and adjust if necesary
-            switch (motorState)
+            if (motorSpeed < targetSpeed)
             {
-            case RUNNING: {
-                break;
+                motorSpeed += 1 / rampSteps;
             }
-
-            case ACCELERATING: {
-                motorSpeed += accelerationIncrement;
-                if (motorSpeed == targetSpeed)
-                {
-                    // we've hit top speed
-                    motorState = RUNNING;
-                }
-                break;
+            else if (motorSpeed > targetSpeed)
+            {
+                mtspd -= 1 / rampSteps;
             }
-
-            case DECELERATING: {
-                motorSpeed -= accelerationIncrement;
-                if (motorSpeed == 0)
-                {
-                    // we've hit top speed
-                    motorState = STOPPED;
-                }
-                break;
-            }
-            }
-            // TODO Check step target
-            leadingEdge = false;
-            // trailing edge
         }
+
+        // TODO Check step target
+        leadingEdge = false;
+        // trailing edge
         else
         {
             digitalWrite(STEP_PIN, LOW);
             leadingEdge = true;
         }
+        OCR1A = minInteruptsPerStep + (minInteruptsPerStep * (1 - motorSpeed));
     }
-    OCR1A = minInteruptsPerStep + stepDiff * pow((1 - motorSpeed), rampPower) * (1 - targetSpeed);
 }
 
-void manRun(){
-  motorState = ACCELERATING;
+void manRun()
+{
+    targetSpeed = maxSpeed;
+    operationState = RUNNING_MAN;
 }
 
-void speedUp(){
-  motorSpeed = (motorSpeed < 1)? motorSpeed + 0.1: 1;
+void speedUp()
+{
+    targetSpeed = (targetSpeed < 1) ? targetSpeed + 0.05 : 1;
 }
 
-void slowDown(){
-  motorSpeed = (motorSpeed > 0.1)? motorSpeed - 0.1: 0.1;
+void slowDown()
+{
+    targetSpeed = (targetSpeed > 0.1) ? targetSpeed - 0.05 : 0.1;
 }
 
 byte readButtons()
