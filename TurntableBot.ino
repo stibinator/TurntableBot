@@ -72,17 +72,16 @@ bool           buttonJustPressed  = false;       //this will be true after a rea
 bool           buttonJustReleased = false;       //this will be true after a readButtons() call if triggered
 byte           buttonWas          = BUTTON_NONE; //used by readButtons() for detection of button events
 byte           button             = BUTTON_NONE;
-volatile byte  rampPower          = 2;
-volatile float motorSpeed         = 0;     //normalised speed motor is currently at, goes from 0→1
-volatile float targetSpeed        = 0;     //normalised speed motor is aiming for, goes from 0→1
-volatile float maxSpeed           = 1;
+volatile int motorSpeed         = 0;     //normalised speed motor is currently at, goes from 0→1
+volatile int targetSpeed        = 0;     //normalised speed motor is aiming for, goes from 0→1
+volatile int maxSpeed           = 10000; //TODO check floats
 // When interuptLoopCount == 1 interrupt every ≈ 64 µs. There are two interrupts per step
 #define interruptDuration    0.000064
 int          maxInteruptsPerStep = 1 / (8 * 2 * interruptDuration);   // 8 steps/second.
 volatile int minInteruptsPerStep = 1 / (500 * 2 * interruptDuration); // 500 steps/second.
-float        rampSteps           = 400;                               // number of steps needed to get to full speed
+float        rampSteps           = 1000;                               // number of steps needed to get to full speed
 //reduce the number of calculations we need to do in the interrupt handler
-volatile float        accelerationIncrement = 1.0 / rampSteps;
+volatile int        accelerationIncrement = 10000 / rampSteps;
 volatile int          stepDiff       = maxInteruptsPerStep - minInteruptsPerStep;
 volatile byte         motorState     = STOPPED;
 volatile byte         operationState = STOPPED;
@@ -107,7 +106,7 @@ void toggleAutoRun()
     if (operationState != RUNNING_AUTO)
     {
         operationState = RUNNING_AUTO;
-        stepTarget     = 12345;//STEPS_PER_REV / shotsPerRev;
+        stepTarget     = STEPS_PER_REV / shotsPerRev;
         stepNumber     = 0;
         currentShot    = 0;
         targetSpeed    = maxSpeed;
