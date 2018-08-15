@@ -77,12 +77,12 @@ volatile int targetSpeed        = 0;     //normalised speed motor is aiming for,
 volatile int maxSpeed           = 10000; //TODO check floats
 // When interuptLoopCount == 1 interrupt every ≈ 64 µs. There are two interrupts per step
 #define interruptDuration    0.000064
-int          maxInteruptsPerStep = 1 / (8 * 2 * interruptDuration);   // 8 steps/second.
-volatile int minInteruptsPerStep = 1 / (500 * 2 * interruptDuration); // 500 steps/second.
+int          maxInterruptsPerStep = 1 / (8 * 2 * interruptDuration);   // 8 steps/second.
+volatile int minInterruptsPerStep = 1 / (500 * 2 * interruptDuration); // 500 steps/second.
 float        rampSteps           = 1000;                               // number of steps needed to get to full speed
 //reduce the number of calculations we need to do in the interrupt handler
 volatile int        accelerationIncrement = 10000 / rampSteps;
-volatile int          stepDiff       = maxInteruptsPerStep - minInteruptsPerStep;
+volatile int          stepDiff       = maxInterruptsPerStep - minInterruptsPerStep;
 volatile byte         motorState     = STOPPED;
 volatile byte         operationState = STOPPED;
 volatile unsigned int stepDirection;     //HIGH and LOW are u_ints
@@ -738,7 +738,7 @@ ISR(TIMER1_COMPA_vect)
         motorState = STOPPED;
         digitalWrite(STEP_PIN, LOW);
     }
-    OCR1A = minInteruptsPerStep + (minInteruptsPerStep * (1 - motorSpeed));
+    OCR1A = minInterruptsPerStep + (stepDiff * (1 - motorSpeed)); //stepDiff = maxInterruptsPerStep - minInterruptsPerStep
 }
 
 void manRun()
@@ -837,7 +837,7 @@ void setupTimer()
     // Compare Match Mode
     //set compare match register
     // OCR1A is the value the compare match register counts to
-    OCR1A = maxInteruptsPerStep;
+    OCR1A = maxInterruptsPerStep;
     // The step loop divides it by 2
     // turn on CTC mode
     TCCR1B |= (1 << WGM12);
