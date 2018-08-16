@@ -72,18 +72,17 @@ bool           buttonJustPressed  = false;       //this will be true after a rea
 bool           buttonJustReleased = false;       //this will be true after a readButtons() call if triggered
 byte           buttonWas          = BUTTON_NONE; //used by readButtons() for detection of button events
 byte           button             = BUTTON_NONE;
-volatile byte  rampPower          = 2;
-volatile float motorSpeed         = 0;     //normalised speed motor is currently at, goes from 0→1
-volatile float targetSpeed        = 0;     //normalised speed motor is aiming for, goes from 0→1
-volatile float maxSpeed           = 1;
+volatile int motorSpeed         = 0;     //normalised speed motor is currently at, goes from 0→1
+volatile int targetSpeed        = 0;     //normalised speed motor is aiming for, goes from 0→1
+volatile int maxSpeed           = 10000; //TODO check floats
 // When interuptLoopCount == 1 interrupt every ≈ 64 µs. There are two interrupts per step
 #define interruptDuration    0.000064
-int          maxInteruptsPerStep = 1 / (8 * 2 * interruptDuration);   // 8 steps/second.
-volatile int minInteruptsPerStep = 1 / (500 * 2 * interruptDuration); // 500 steps/second.
-volatile float        rampSteps           = 400;                               // number of steps needed to get to full speed
+int          maxInterruptsPerStep = 1 / (8 * 2 * interruptDuration);   // 8 steps/second.
+volatile int minInterruptsPerStep = 1 / (500 * 2 * interruptDuration); // 500 steps/second.
+float        rampSteps           = 1000;                               // number of steps needed to get to full speed
 //reduce the number of calculations we need to do in the interrupt handler
-volatile float        accelerationIncrement = 1.0 / rampSteps;
-volatile int          stepDiff       = maxInteruptsPerStep - minInteruptsPerStep;
+volatile int        accelerationIncrement = 10000 / rampSteps;
+volatile int          stepDiff       = maxInterruptsPerStep - minInterruptsPerStep;
 volatile byte         motorState     = STOPPED;
 volatile byte         operationState = STOPPED;
 volatile unsigned int stepDirection;     //HIGH and LOW are u_ints
@@ -107,7 +106,7 @@ void toggleAutoRun()
     if (operationState != RUNNING_AUTO)
     {
         operationState = RUNNING_AUTO;
-        stepTarget     = 12345;//STEPS_PER_REV / shotsPerRev;
+        stepTarget     = STEPS_PER_REV / shotsPerRev;
         stepNumber     = 0;
         currentShot    = 0;
         targetSpeed    = maxSpeed;
@@ -621,26 +620,26 @@ void loop()
         Serial.println(String("button: " + String(button)));//debug
         allTheMenus[currentMenu]->click(button);
     }
-    if (motorSpeed > 0)
-    {
-        if (motorSpeed < targetSpeed)
-        {
-            motorState = ACCELERATING;
-        }
-        else if (motorState > targetSpeed)
-        {
-            motorState = DECELERATING;
-        }
-        else
-        {
-            motorState = RUNNING;
-        }
-    }
-    else
-    {
-        // STOPPED
-        motorState = STOPPED;
-    }
+    // if (motorSpeed > 0)
+    // {
+    //     if (motorSpeed < targetSpeed)
+    //     {
+    //         motorState = ACCELERATING;
+    //     }
+    //     else if (motorState > targetSpeed)
+    //     {
+    //         motorState = DECELERATING;
+    //     }
+    //     else
+    //     {
+    //         motorState = RUNNING;
+    //     }
+    // }
+    // else
+    // {
+    //     // STOPPED
+    //     motorState = STOPPED;
+    // }
     if (operationState == RUNNING_AUTO)
     {
         if (stepNumber == stepTarget)
@@ -714,14 +713,14 @@ ISR(TIMER1_COMPA_vect)
                 // Serial.print("motorSpeed++ ");
                 // Serial.println(motorSpeed);
                 motorSpeed += 1.0 / rampSteps;
-                // motorState  = ACCELERATING;
+                motorState  = ACCELERATING;
             }
             else if (motorSpeed > targetSpeed)
             {
                 // Serial.print("motorSpeed-- ");
                 // Serial.println(motorSpeed);
                 motorSpeed -= 1.0 / rampSteps;
-                // motorState  = DECELERATING;
+                motorState  = DECELERATING;
             }
 
             leadingEdge = false;
@@ -739,7 +738,7 @@ ISR(TIMER1_COMPA_vect)
         motorState = STOPPED;
         digitalWrite(STEP_PIN, LOW);
     }
-    OCR1A = minInteruptsPerStep + (minInteruptsPerStep * (1 - motorSpeed));
+    OCR1A = minInterruptsPerStep + (stepDiff * (1 - motorSpeed)); //stepDiff = maxInterruptsPerStep - minInterruptsPerStep
 }
 
 void manRun()
@@ -838,7 +837,7 @@ void setupTimer()
     // Compare Match Mode
     //set compare match register
     // OCR1A is the value the compare match register counts to
-    OCR1A = maxInteruptsPerStep;
+    OCR1A = maxInterruptsPerStep;
     // The step loop divides it by 2
     // turn on CTC mode
     TCCR1B |= (1 << WGM12);
