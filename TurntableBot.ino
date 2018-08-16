@@ -25,7 +25,7 @@
 #define RUNNING_MAN           2
 
 #define STEPS_PER_DEGREE      273.6 // 76 * 360 / 100
-#define STEPS_PER_REV         99468
+// #define STEPS_PER_REV         99468
 #define BUTTON_ADC_PIN        A0    // A0 is the button ADC input
 #define LCD_BACKLIGHT_PIN     10    // D10 controls LCD backlight
 // ADC readings expected for the 5 buttons on the ADC input
@@ -47,41 +47,52 @@
 #define LCD_BACKLIGHT_ON()      digitalWrite(LCD_BACKLIGHT_PIN, HIGH)
 #define LCD_BACKLIGHT(state)    { if (state) { digitalWrite(LCD_BACKLIGHT_PIN, HIGH); }else{ digitalWrite(LCD_BACKLIGHT_PIN, LOW); } }
 // directions
-#define CLOCKWISE         0
-#define COUNTERCW         1
+#define CLOCKWISE               0
+#define COUNTERCW               1
 // Menus
-#define RUN_MENU          0
-#define MAIN_MENU         1
-#define SETUP_MENU        2
-#define DIRECTION_MENU    3
-#define MOTOR_MENU        4
-#define SPEED_MENU        5
-#define ACCEL_MENU        6
-#define STEPS_MENU        7
-#define MANUAL_MENU       8
-#define DELAY_MENU        9
+#define RUN_MENU                0
+#define MAIN_MENU               1
+#define SETUP_MENU              2
+#define DIRECTION_MENU          3
+#define MOTOR_MENU              4
+#define SPEED_MENU              5
+#define ACCEL_MENU              6
+#define STEPS_MENU              7
+#define MANUAL_MENU             8
+#define DELAY_MENU              9
 
-#define CLICKABLE         true
-#define NOT_CLICKABLE     false
+#define CLICKABLE               true
+#define NOT_CLICKABLE           false
+#define LEFT_JUSTIFY            true
+#define RIGHT_JUSTIFY           false
+#define MAX_STEPS_PER_SECOND    600
+#define MIN_STEPS_PER_SECOND    8
 
+#define BUTTON_LONG_PRESS       2000
+#define BUTTON_REPEAT_TIME      750
+
+#define interruptDuration       0.000064
 
 /*--------------------------------------------------------------------------------------
  *  Variables
  *  --------------------------------------------------------------------------------------*/
-bool           buttonJustPressed  = false;       //this will be true after a readButtons() call if triggered
-bool           buttonJustReleased = false;       //this will be true after a readButtons() call if triggered
-byte           buttonWas          = BUTTON_NONE; //used by readButtons() for detection of button events
-byte           button             = BUTTON_NONE;
-volatile int motorSpeed         = 0;     //normalised speed motor is currently at, goes from 0→1
-volatile int targetSpeed        = 0;     //normalised speed motor is aiming for, goes from 0→1
-volatile int maxSpeed           = 10000; //TODO check floats
+bool          buttonJustPressed  = false;                                               //this will be true after a readButtons() call if triggered
+bool          buttonJustReleased = false;                                               //this will be true after a readButtons() call if triggered
+byte          buttonWas          = BUTTON_NONE;                                         //used by readButtons() for detection of button events
+byte          button             = BUTTON_NONE;
+unsigned long btnPressMillis     = 0;                                                   //time the last button was pressed
+unsigned long           btnHoldTime        = 0;                                                   //how long the button has been held for
+int           btnRepeatCounter   = 0;                                                   // counts untill next auto click
+volatile int  motorSpeed         = 0;                                                   //normalised speed motor is currently at, goes from 0→1
+volatile int  targetSpeed        = 0;                                                   //normalised speed motor is aiming for, goes from 0→1
+volatile int  maxSpeed           = 10000;                                               //TODO check floats
 // When interuptLoopCount == 1 interrupt every ≈ 64 µs. There are two interrupts per step
-#define interruptDuration    0.000064
-int          maxInterruptsPerStep = 1 / (8 * 2 * interruptDuration);   // 8 steps/second.
-volatile int minInterruptsPerStep = 1 / (500 * 2 * interruptDuration); // 500 steps/second.
-float        rampSteps           = 1000;                               // number of steps needed to get to full speed
+int          stepsPerSecond       = 500;                                                //the max speed of the stepper
+int          maxInterruptsPerStep = 1 / (MIN_STEPS_PER_SECOND * 2 * interruptDuration); // 8 steps/second.
+volatile int minInterruptsPerStep = 1 / (stepsPerSecond * 2 * interruptDuration);       // 500 steps/second.
+int          rampSteps            = 1000;                                               // number of steps needed to get to full speed
 //reduce the number of calculations we need to do in the interrupt handler
-volatile int        accelerationIncrement = 10000 / rampSteps;
+volatile int          accelerationIncrement = maxSpeed / rampSteps;
 volatile int          stepDiff       = maxInterruptsPerStep - minInterruptsPerStep;
 volatile byte         motorState     = STOPPED;
 volatile byte         operationState = STOPPED;
@@ -90,9 +101,10 @@ volatile int          stepNumber;
 volatile int          stepTarget;
 volatile bool         leadingEdge;
 // auto run parameters
-int shotsPerRev = 12;
-int currentShot = 0;
-int delayTime   = 1;
+volatile const unsigned long stepsPerRev = 99468;
+unsigned long shotsPerRev = 12;
+unsigned long currentShot = 0;
+int           delayTime   = 1;
 //--------------------------------------------------------------------------------------
 // Init the LCD library with the LCD pins to be used
 LiquidCrystal lcd(8, 9, 4, 5, 6, 7);     //Pins for the freetronics 16x2 LCD shield.
@@ -106,7 +118,7 @@ void toggleAutoRun()
     if (operationState != RUNNING_AUTO)
     {
         operationState = RUNNING_AUTO;
-        stepTarget     = STEPS_PER_REV / shotsPerRev;
+        stepTarget     = stepsPerRev / shotsPerRev;
         stepNumber     = 0;
         currentShot    = 0;
         targetSpeed    = maxSpeed;
@@ -126,9 +138,41 @@ void stopMotor()
     }
 }
 
-void intToDisplayChar(int theInt, char theChars[STRING_LENGTH])
+void intToDisplayChar(int theInt, char theChars[STRING_LENGTH], bool justify)
 {
-    String(theInt).toCharArray(theChars, STRING_LENGTH);
+    String s = String(theInt);
+    byte   n = min(s.length(), STRING_LENGTH);
+
+    if (justify)
+    {
+        // LEFT_JUSTIFY
+        for (byte i = 0; i < STRING_LENGTH - 1; i++)
+        {
+            if (i < n)
+            {
+                theChars[i] = s.charAt(i);
+            }
+            else
+            {
+                theChars[i] = char(' ');
+            }
+        }
+    }
+    else
+    {
+        // RIGHT_JUSTIFY
+        for (byte i = 0; i < STRING_LENGTH - 1; i++)
+        {
+            if (i < (STRING_LENGTH - 1 - n))
+            {
+                theChars[i] = char(' ');
+            }
+            else
+            {
+                theChars[i] = s.charAt(STRING_LENGTH - 1 - n + i);
+            }
+        }
+    }
 }
 
 // blank menuItem
@@ -147,12 +191,12 @@ MenuItem startBtn(lSTART, toggleAutoRun, []() {
     }, CLICKABLE);
 char     lShotCount[] = "    0";
 MenuItem shotCounter(lShotCount, []() {
-                     intToDisplayChar(currentShot, lShotCount);
+                     intToDisplayChar(currentShot, lShotCount, RIGHT_JUSTIFY);
                      return(lShotCount);
     });
 char     lShotsPerRev[] = "00000";
 MenuItem shotsIndicator(lShotsPerRev, []() {
-                        intToDisplayChar(shotsPerRev, lShotsPerRev);
+                        intToDisplayChar(shotsPerRev, lShotsPerRev, LEFT_JUSTIFY);
                         return(lShotsPerRev);
     });
 MenuItem *runMenuButtons[4] =
@@ -337,14 +381,20 @@ Menu    motorMenu
 MenuItem backMtrBtn(lBack, []() {
                     currentMenu = MOTOR_MENU;
     }, CLICKABLE);
-char     lMINUS[] = "[-]  ";
-MenuItem slowDownBtn(lMINUS, []() {
-                     maxSpeed = (maxSpeed > 0.1) ? maxSpeed - 0.05 : 0.1;
-    }, CLICKABLE);
+char lMINUS[] = "[-]  ";
+void decreaseMaxSpeed()
+{
+    stepsPerSecond = max(MIN_STEPS_PER_SECOND, stepsPerSecond - 1);
+}
+
+MenuItem slowDownBtn(lMINUS, decreaseMaxSpeed, CLICKABLE);
 char     lPLUS[] = "  [+]";
-MenuItem speedUpBtn(lPLUS, []() {
-                    maxSpeed = (maxSpeed < 1) ? maxSpeed + 0.05 : 1;
-    }, CLICKABLE);
+void increaseMaxSpeed()
+{
+    stepsPerSecond = min(MAX_STEPS_PER_SECOND, stepsPerSecond + 1);
+}
+
+MenuItem speedUpBtn(lPLUS, increaseMaxSpeed, CLICKABLE);
 
 MenuItem *speedMenuButtons[4] =
 {
@@ -358,7 +408,7 @@ char   lspeedmnu[] = "speed";
 UIItem speedMenuLabel(lspeedmnu);
 char   lMaxSpeed[] = "00000";
 UIItem speedIndicator(lMaxSpeed, []() {
-                      intToDisplayChar(maxSpeed, lMaxSpeed);
+                      intToDisplayChar(stepsPerSecond, lMaxSpeed, RIGHT_JUSTIFY);
                       return(lMaxSpeed);
     });
 UIItem *speedMenuUIItems[2] = {
@@ -377,13 +427,19 @@ Menu    speedMenu
 // char lBack[] = "<Back";
 // MenuItem backMtrBtn(lBack, []() {currentMenu = MOTOR_MENU;}, CLICKABLE);
 // char lMINUS[] = "[ - ]";
-MenuItem accelIncreaseBtn(lMINUS, []() {
-                          rampSteps = (rampSteps > 1) ? rampSteps - 1 : 1;
-    }, CLICKABLE);
+void accelIncrease()
+{
+    rampSteps = max(rampSteps - 1, 1);
+}
+
+MenuItem accelIncreaseBtn(lMINUS, accelIncrease, CLICKABLE);
 // char lPLUS[] = "[ + ]";
-MenuItem accelDecreaseBtn(lPLUS, []() {
-                          rampSteps++;
-    }, CLICKABLE);
+void accelDecrease()
+{
+    rampSteps++;
+}
+
+MenuItem accelDecreaseBtn(lPLUS, accelDecrease, CLICKABLE);
 
 MenuItem *accelMenuButtons[4] =
 {
@@ -397,7 +453,7 @@ char   laccelmnu[] = "accel";
 UIItem accelMenuLabel(laccelmnu);
 char   lAccel[] = "00000";
 UIItem accelIndicator(lAccel, []() {
-                      intToDisplayChar(100 / rampSteps, lAccel);
+                      intToDisplayChar(rampSteps, lAccel, RIGHT_JUSTIFY);
                       return(lAccel);
     });
 UIItem *accelMenuUIItems[2] = {
@@ -417,12 +473,15 @@ Menu    accelMenu
 // MenuItem backMtrBtn(lBack, []() {currentMenu = MOTOR_MENU;}, CLICKABLE);
 // char lMINUS[] = "[ - ]";
 MenuItem shotsIncreaseBtn(lMINUS, []() {
-                          shotsPerRev = (shotsPerRev > 1) ? shotsPerRev - 1 : 1;
+                          shotsPerRev = max(shotsPerRev - 1, 1);
     }, CLICKABLE);
 // char lPLUS[] = "[ + ]";
-MenuItem shotsDecreaseBtn(lPLUS, []() {
-                          shotsPerRev = (shotsPerRev <= 3600) ? shotsPerRev + 1 : 3600;
-    }, CLICKABLE);
+void shotsDecrease()
+{
+    shotsPerRev = min(shotsPerRev + 1, stepsPerRev);
+}
+
+MenuItem shotsDecreaseBtn(lPLUS, shotsDecrease, CLICKABLE);
 
 MenuItem *shotsMenuButtons[4] =
 {
@@ -436,7 +495,7 @@ char   lshotsmnu[] = "shots";
 UIItem shotsMenuLabel(lshotsmnu);
 char   lShots[] = "00000";
 UIItem shotsIndicatorUI(lShots, []() {
-                        intToDisplayChar(shotsPerRev, lShots);
+                        intToDisplayChar(shotsPerRev, lShots, LEFT_JUSTIFY);
                         return(lShots);
     });                                                     //TODO sprintf function
 UIItem *shotsMenuUIItems[2] = {
@@ -455,55 +514,73 @@ Menu    shotsMenu
 // char lMenu[] = "Menu ";
 // MenuItem mainMenuBtn(lMenu , []() {currentMenu = MAIN_MENU;}, CLICKABLE);
 // char lSTOP[] = "STOP ";
-MenuItem stopBtn(lSTOP, stopMotor, CLICKABLE);
+char     lSHOOT[] = "SHOOT";
+MenuItem stopBtn(lSTOP, []() {
+                 if (motorState)
+                 {
+                     stopMotor();
+                 }
+                 else
+                 {
+                     takeShot();
+                 };
+    }, []() {
+                 return((motorState) ? lSTOP : lSHOOT);
+    }, CLICKABLE);
 // if running CW speed up, if CCW slow down, otherwise start running CW
-MenuItem runCWBtn(lCW, []() {
-                  if (motorState)
-                  // while running the buttons become speedup or slowdown buttons
-                  {
-                      if (direction == CLOCKWISE)
-                      {
-                          // giddy up
-                          targetSpeed = (targetSpeed < maxSpeed) ? targetSpeed + 0.1 : maxSpeed;
-                      }
-                      else
-                      // whoah neddy
-                      {
-                          targetSpeed = (targetSpeed > 0.05) ? targetSpeed - 0.05 : 0.05;
-                      }
-                  }
-                  else
-                  {
-                      direction = CLOCKWISE;
-                      digitalWrite(DIR_PIN, direction);
-                      targetSpeed    = maxSpeed;
-                      operationState = RUNNING_MAN;
-                  }
-    }, CLICKABLE);
+void runCW()
+{
+    if (motorState)
+    // while running the buttons become speedup or slowdown buttons
+    {
+        if (direction == CLOCKWISE)
+        {
+            // giddy up
+            targetSpeed = min(targetSpeed + 20, maxSpeed);
+        }
+        else
+        // whoah neddy
+        {
+            targetSpeed = max(targetSpeed - 20, 20);
+        }
+    }
+    else
+    {
+        direction = CLOCKWISE;
+        digitalWrite(DIR_PIN, direction);
+        targetSpeed    = maxSpeed;
+        operationState = RUNNING_MAN;
+    }
+}
+
+MenuItem runCWBtn(lCW, runCW, CLICKABLE);
 //if running CCW speed up, if CW slow down, otherwise start running CCW
-MenuItem runCCWBtn(lCW, []() {
-                   if (motorState)
-                   // while running the buttons become speedup or slowdown buttons
-                   {
-                       if (direction == COUNTERCW)
-                       {
-                           // giddy up
-                           targetSpeed = (targetSpeed < maxSpeed) ? targetSpeed + 0.1 : maxSpeed;
-                       }
-                       else
-                       // whoah neddy
-                       {
-                           targetSpeed = (targetSpeed > 0.05) ? targetSpeed - 0.05 : 0.05;
-                       }
-                   }
-                   else
-                   {
-                       direction   = COUNTERCW;
-                       targetSpeed = maxSpeed;
-                       digitalWrite(DIR_PIN, direction);
-                       operationState = RUNNING_MAN;
-                   }
-    }, CLICKABLE);
+void runCCW()
+{
+    if (motorState)
+    // while running the buttons become speedup or slowdown buttons
+    {
+        if (direction == COUNTERCW)
+        {
+            // giddy up
+            targetSpeed = min(targetSpeed + 20, maxSpeed);
+        }
+        else
+        // whoah neddy
+        {
+            targetSpeed = max(targetSpeed - 20, 20);
+        }
+    }
+    else
+    {
+        direction   = COUNTERCW;
+        targetSpeed = maxSpeed;
+        digitalWrite(DIR_PIN, direction);
+        operationState = RUNNING_MAN;
+    }
+}
+
+MenuItem  runCCWBtn(lCW, runCCW, CLICKABLE);
 MenuItem *manMenuButtons[4] =
 {
     &mainMenuBtn,
@@ -558,7 +635,7 @@ char   ldelaymnu[] = "delay";
 UIItem delayMenuLabel(ldelaymnu);
 char   lDelayTime[] = "00000";
 UIItem delayIndicator(lDelayTime, []() {
-                      intToDisplayChar(delayTime, lDelayTime);
+                      intToDisplayChar(delayTime, lDelayTime, LEFT_JUSTIFY);
                       return(lDelayTime);
     });                                                   //TODO sprintf function
 UIItem *delayMenuUIItems[2] = {
@@ -594,7 +671,7 @@ void setup()
     // motor contreol stuff
     leadingEdge = true;
     stepNumber  = 0;
-    stepTarget  = STEPS_PER_REV / shotsPerRev;
+    stepTarget  = stepsPerRev / shotsPerRev;
     //button adc input
     pinMode(BUTTON_ADC_PIN, INPUT);        //ensure A0 is an input
     digitalWrite(BUTTON_ADC_PIN, LOW);     //ensure pullup is off on A0
@@ -617,44 +694,45 @@ void loop()
     button = readButtons();
     if (buttonJustPressed)
     {
-        Serial.println(String("button: " + String(button)));//debug
-        allTheMenus[currentMenu]->click(button);
+        Serial.println(String("button: " + String(button))); //debug
+        allTheMenus[currentMenu]->click(button);             //TODO deal with auto clicks
     }
-    // if (motorSpeed > 0)
-    // {
-    //     if (motorSpeed < targetSpeed)
-    //     {
-    //         motorState = ACCELERATING;
-    //     }
-    //     else if (motorState > targetSpeed)
-    //     {
-    //         motorState = DECELERATING;
-    //     }
-    //     else
-    //     {
-    //         motorState = RUNNING;
-    //     }
-    // }
-    // else
-    // {
-    //     // STOPPED
-    //     motorState = STOPPED;
-    // }
+    // set some control variables
+    accelerationIncrement = maxSpeed / rampSteps;
+    minInterruptsPerStep  = 1 / (stepsPerSecond * 2 * interruptDuration);
+
+    if (motorSpeed > 0 || targetSpeed > 0)
+    {
+        if (motorSpeed < targetSpeed)
+        {
+            motorState = ACCELERATING;
+        }
+        else if (motorState > targetSpeed)
+        {
+            motorState = DECELERATING;
+        }
+        else
+        {
+            motorState = RUNNING;
+        }
+    }
+    else
+    {
+        // STOPPED
+        motorState = STOPPED;
+    }
     if (operationState == RUNNING_AUTO)
     {
         if (stepNumber == stepTarget)
         {
             if (currentShot < shotsPerRev)
             {
-                Serial.print("------------taking a shot ---------");
                 targetSpeed = 0.0;
-                currentShot++;
-                stepTarget  = STEPS_PER_REV / shotsPerRev;
+                stepTarget  = stepsPerRev / shotsPerRev;
                 stepNumber  = 0;
                 targetSpeed = maxSpeed;
                 // take a shot
-                delay(delayTime * 1000);
-                // TODO
+                takeShot();
             }
             else
             {
@@ -663,20 +741,20 @@ void loop()
             }
         }
     }
-    Serial.print("tarsp:");
-    Serial.print(targetSpeed);
-    Serial.print(" mtrSp:");
-    Serial.print(motorSpeed);
-    Serial.print(" mtrSt:");
-    Serial.print(motorState);
-    Serial.print(" opSt:");
-    Serial.print(operationState);
-    Serial.print(" stTrg:");
-    Serial.print(stepTarget);
-    Serial.print(" stepN:");
-    Serial.print(stepNumber);
-    Serial.print(" Shot:");
-    Serial.println(currentShot);
+    // Serial.print("tarsp:");
+    // Serial.print(targetSpeed);
+    // Serial.print(" mtrSp:");
+    // Serial.print(motorSpeed);
+    // Serial.print(" mtrSt:");
+    // Serial.print(motorState);
+    // Serial.print(" opSt:");
+    // Serial.print(operationState);
+    // Serial.print(" stTrg:");
+    // Serial.print(stepTarget);
+    // Serial.print(" stepN:");
+    // Serial.print(stepNumber);
+    // Serial.print(" Shot:");
+    // Serial.println(currentShot);
 }
 
 // timer interrupt handler - where the business logic happens
@@ -704,23 +782,13 @@ ISR(TIMER1_COMPA_vect)
             }
 
             // check speed and adjust if necesary
-            if (motorSpeed == targetSpeed)
-            {
-                motorState = RUNNING;
-            }
             else if (motorSpeed < targetSpeed)
             {
-                // Serial.print("motorSpeed++ ");
-                // Serial.println(motorSpeed);
-                motorSpeed += 1.0 / rampSteps;
-                motorState  = ACCELERATING;
+                motorSpeed = min(motorSpeed + accelerationIncrement, targetSpeed);
             }
             else if (motorSpeed > targetSpeed)
             {
-                // Serial.print("motorSpeed-- ");
-                // Serial.println(motorSpeed);
-                motorSpeed -= 1.0 / rampSteps;
-                motorState  = DECELERATING;
+                motorSpeed = max(motorSpeed - accelerationIncrement, targetSpeed);
             }
 
             leadingEdge = false;
@@ -738,7 +806,7 @@ ISR(TIMER1_COMPA_vect)
         motorState = STOPPED;
         digitalWrite(STEP_PIN, LOW);
     }
-    OCR1A = minInterruptsPerStep + (stepDiff * (1 - motorSpeed)); //stepDiff = maxInterruptsPerStep - minInterruptsPerStep
+    OCR1A = minInterruptsPerStep + (stepDiff * (maxSpeed - motorSpeed) / maxSpeed); //stepDiff = maxInterruptsPerStep - minInterruptsPerStep
 }
 
 void manRun()
@@ -747,9 +815,20 @@ void manRun()
     operationState = RUNNING_MAN;
 }
 
+void takeShot()
+{
+    Serial.println("Taking shot");//TODO
+    // digitalWrite(SHUTTER_PIN, LOW);
+    //delay(500);
+    //digitalWrite(SHUTTER_PIN, HIGH);
+    currentShot++;
+    delay(delayTime * 1000);
+}
+
 byte readButtons()
 {
     unsigned int buttonVoltage;
+    unsigned int longPressCount;
     byte         button = BUTTON_NONE; // return no button pressed if the below checks don't write to btn
 
     //read the button ADC pin voltage
@@ -786,7 +865,10 @@ byte readButtons()
         //it's the duty of the receiver to clear these flags if it wants to detect a new button change event
         buttonJustPressed  = true;
         buttonJustReleased = false;
+        btnPressMillis     = millis();
+        Serial.println(btnPressMillis); //debug
     }
+
     else if ((buttonWas != BUTTON_NONE) && (button == BUTTON_NONE))
     {
         buttonJustPressed  = false;
@@ -797,24 +879,27 @@ byte readButtons()
         buttonJustPressed  = false;
         buttonJustReleased = false;
     }
+    // deal with user holding button down
+    if ((button != BUTTON_NONE) && (buttonWas == button))
+    {
+        btnHoldTime = millis() - btnPressMillis;
+        Serial.println(btnHoldTime);//debug
+        if (btnHoldTime > BUTTON_LONG_PRESS)
+        {
+          longPressCount = min( BUTTON_LONG_PRESS / btnHoldTime, 10);
+            if (millis() - btnRepeatCounter > BUTTON_REPEAT_TIME / longPressCount)
+            {
+                buttonJustPressed  = true;
+                buttonJustReleased = false;
+                btnRepeatCounter   = millis();
+            }
+        }
+    }
 
     //save the latest button value, for change event detection next time round
     buttonWas = button;
 
     return(button);
-}
-
-void stopStepping()
-{
-    // reset the motor stepping loop
-    digitalWrite(ENABLE_PIN, HIGH);
-}
-
-void startStepping()
-{
-    leadingEdge = true;
-    digitalWrite(STEP_PIN, LOW);
-    digitalWrite(ENABLE_PIN, LOW);
 }
 
 void setupTimer()
