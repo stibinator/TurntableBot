@@ -80,7 +80,7 @@ volatile float maxSpeed           = 1;
 #define interruptDuration    0.000064
 int          maxInteruptsPerStep = 1 / (8 * 2 * interruptDuration);   // 8 steps/second.
 volatile int minInteruptsPerStep = 1 / (500 * 2 * interruptDuration); // 500 steps/second.
-float        rampSteps           = 400;                               // number of steps needed to get to full speed
+volatile float        rampSteps           = 400;                               // number of steps needed to get to full speed
 //reduce the number of calculations we need to do in the interrupt handler
 volatile float        accelerationIncrement = 1.0 / rampSteps;
 volatile int          stepDiff       = maxInteruptsPerStep - minInteruptsPerStep;
@@ -621,26 +621,26 @@ void loop()
         Serial.println(String("button: " + String(button)));//debug
         allTheMenus[currentMenu]->click(button);
     }
-    // if (motorSpeed > 0)
-    // {
-    //     if (motorSpeed < targetSpeed)
-    //     {
-    //         motorState = ACCELERATING;
-    //     }
-    //     else if (motorState > targetSpeed)
-    //     {
-    //         motorState = DECELERATING;
-    //     }
-    //     else
-    //     {
-    //         motorState = RUNNING;
-    //     }
-    // }
-    // else
-    // {
-    //     // STOPPED
-    //     motorState = STOPPED;
-    // }
+    if (motorSpeed > 0)
+    {
+        if (motorSpeed < targetSpeed)
+        {
+            motorState = ACCELERATING;
+        }
+        else if (motorState > targetSpeed)
+        {
+            motorState = DECELERATING;
+        }
+        else
+        {
+            motorState = RUNNING;
+        }
+    }
+    else
+    {
+        // STOPPED
+        motorState = STOPPED;
+    }
     if (operationState == RUNNING_AUTO)
     {
         if (stepNumber == stepTarget)
@@ -714,14 +714,14 @@ ISR(TIMER1_COMPA_vect)
                 // Serial.print("motorSpeed++ ");
                 // Serial.println(motorSpeed);
                 motorSpeed += 1.0 / rampSteps;
-                motorState  = ACCELERATING;
+                // motorState  = ACCELERATING;
             }
             else if (motorSpeed > targetSpeed)
             {
                 // Serial.print("motorSpeed-- ");
                 // Serial.println(motorSpeed);
                 motorSpeed -= 1.0 / rampSteps;
-                motorState  = DECELERATING;
+                // motorState  = DECELERATING;
             }
 
             leadingEdge = false;
