@@ -7,34 +7,38 @@
 #include <avr/io.h>
 
 // Arduino defines
-#define STEP_CLOCKWISE    HIGH      // the value to set the dir_pin to when changing direction
-#define STEP_REVERSE      LOW
-#define DIR_PIN           13
-#define STEP_PIN          12
-#define ENABLE_PIN        11    //goes LOW to enable
+#define STEP_CLOCKWISE       HIGH   // the value to set the dir_pin to when changing direction
+#define STEP_REVERSE         LOW
+#define DIR_PIN              13
+#define STEP_PIN             12
+#define ENABLE_PIN           11 //goes LOW to enable
+#define SHUTTER_PIN          3
+#define FOCUS_PIN            2
+
+#define BUTTON_ADC_PIN       A0     // A0 is the button ADC input
+#define LCD_BACKLIGHT_PIN    10     // D10 controls LCD backlight
+// ADC readings expected for the 5 buttons on the ADC input
+#define RIGHT_10BIT_ADC      0      // right
+#define UP_10BIT_ADC         100    // up
+#define DOWN_10BIT_ADC       256    // down
+#define LEFT_10BIT_ADC       408    // left
+#define SELECT_10BIT_ADC     640    // right
+#define BUTTONHYSTERESIS     40     // hysteresis for valid button sensing window
 
 // motorState constants
-#define STOPPED           0    //also used as operation state
-#define ACCELERATING      1
-#define RUNNING           2
-#define DECELERATING      3
+#define STOPPED              0 //also used as operation state
+#define ACCELERATING         1
+#define RUNNING              2
+#define DECELERATING         3
 
 // operation state constants
 // #define STOPPED              0 //defined already
-#define RUNNING_AUTO          1
-#define RUNNING_MAN           2
+#define RUNNING_AUTO        1
+#define RUNNING_MAN         2
 
-#define STEPS_PER_DEGREE      273.6 // 76 * 360 / 100
+#define STEPS_PER_DEGREE    273.6   // 76 * 360 / 100
 // #define STEPS_PER_REV         99468
-#define BUTTON_ADC_PIN        A0    // A0 is the button ADC input
-#define LCD_BACKLIGHT_PIN     10    // D10 controls LCD backlight
-// ADC readings expected for the 5 buttons on the ADC input
-#define RIGHT_10BIT_ADC       0     // right
-#define UP_10BIT_ADC          100   // up
-#define DOWN_10BIT_ADC        256   // down
-#define LEFT_10BIT_ADC        408   // left
-#define SELECT_10BIT_ADC      640   // right
-#define BUTTONHYSTERESIS      40    // hysteresis for valid button sensing window
+
 //return values for readButtons()
 #define BUTTON_TOPLEFT        0     //
 #define BUTTON_TOPRIGHT       1     //
@@ -104,9 +108,11 @@ volatile int          stepTarget;
 volatile bool         leadingEdge;
 // auto run parameters
 volatile const unsigned long stepsPerRev = 99468;
-unsigned long shotsPerRev = 12;
-unsigned long currentShot = 0;
-int           delayTime   = 3;
+unsigned long shotsPerRev      = 12;
+unsigned long currentShot      = 0;
+int           preShotDelayTime = 3000;
+int           focusDelay       = 1000;
+int           shutterDelay     = 1000;
 //--------------------------------------------------------------------------------------
 // Init the LCD library with the LCD pins to be used
 LiquidCrystal lcd(8, 9, 4, 5, 6, 7);     //Pins for the freetronics 16x2 LCD shield.
@@ -232,7 +238,7 @@ MenuItem *runMenuButtons[4] =
     &shotsIndicator
 };
 // runMenu UIItems
-char motorIndicatorFrames[9][STRING_LENGTH] = { " ||  ", " +>  ", " =>  ", " ->  ", " ||  ", " <+  ", " <=  ", " <-  ", ">[o]<" };
+char motorIndicatorFrames[9][STRING_LENGTH] = { "<||  ", "<-+- ", "<-=- ", "<-|- ", " ||> ", "-+-> ", "-=-> ", "-|-> ", ">[o]<" };
 char *motorIndicate()
 {
     if (takingShot)
@@ -702,13 +708,50 @@ Menu manMenu
     &lcd
 );
 
+// TODO
+// 2 - delaysMenu ------------------------------------
+// delaysMenu buttons
+char     lPreShot[] = "Pre ";
+MenuItem motorMenuBtn(lPreShot, []() {
+                      currentMenu = MOTOR_MENU;
+    }, CLICKABLE);
+char     lDir[] = "Dir  ";
+MenuItem directionMenuBtn(lDir, []() {
+                          currentMenu = DIRECTION_MENU;
+    }, CLICKABLE);
+char     lSteps[] = "Shots";
+MenuItem stepsMenuBtn(lSteps, []() {
+                      currentMenu = STEPS_MENU;
+    }, CLICKABLE);
 
+MenuItem *delaysMenuButtons[4] =
+{
+    &mainMenuBtn,
+    &motorMenuBtn,
+    &directionMenuBtn,
+    &stepsMenuBtn,
+};
+
+// delaysMenu UIItems
+char    lset[] = "set  ";
+UIItem  delaysMnuLabel(lset);
+UIItem *delaysMenuUIItems[2] =
+{
+    &delaysMnuLabel,
+    &blankUII
+};
+Menu delaysMenu
+(
+    setupMenuButtons,
+    setupMenuUIItems,
+    &lcd
+);
 // 9 - delay ------------------------------------
 void decreaseDelay()
 {
-    if (delayTime > 0)
+    if (preShotDelayTime >= 100)
     {
-        delayTime--;
+        preShotDelayTime -= 100;
     }
 }
 
@@ -716,7 +759,7 @@ MenuItem delayDecreaseBtn(lMINUS, decreaseDelay, CLICKABLE, AUTOCLICKABLE);
 
 void increaseDelay()
 {
-    delayTime++;
+    preShotDelayTime += 100;
 }
 
 MenuItem delayIncreaseBtn(lPLUS, increaseDelay, CLICKABLE, AUTOCLICKABLE);
@@ -732,10 +775,13 @@ MenuItem *delayMenuButtons[4] =
 char   ldelaymnu[] = "delay";
 UIItem delayMenuLabel(ldelaymnu);
 char   lDelayTime[] = "00000";
-UIItem delayIndicator(lDelayTime, [] () {
-                      intToDisplayChar(delayTime, lDelayTime, LEFT_JUSTIFY);
-                      return(lDelayTime);
-    });                                                 //TODO sprintf function
+char *indicatePreShotDelayTime()
+{
+    intToDisplayChar(preShotDelayTime, lDelayTime, LEFT_JUSTIFY);
+    return(lDelayTime);
+}
+
+UIItem  delayIndicator(lDelayTime, indicatePreShotDelayTime);                                                //TODO sprintf function
 UIItem *delayMenuUIItems[2] = {
     &delayMenuLabel,
     &delayIndicator
@@ -744,6 +790,100 @@ Menu    delayMenu
 (
     delayMenuButtons,
     delayMenuUIItems,
+    &lcd
+);
+
+// 10 - focusdelay ------------------------------------
+void decreaseFocusDelay()
+{
+    if (focusDelay >= 100)
+    {
+        focusDelay -= 100;
+    }
+}
+
+MenuItem focusDelayDecreaseBtn(lMINUS, decreaseFocusDelay, CLICKABLE, AUTOCLICKABLE);
+
+void increaseFocusDelay()
+{
+    focusDelay += 100;
+}
+
+MenuItem focusDelayIncreaseBtn(lPLUS, increaseFocusDelay, CLICKABLE, AUTOCLICKABLE);
+
+MenuItem *focusDelayMenuButtons[4] =
+{
+    &backMtrBtn,
+    &blankMI,
+    &focusDelayDecreaseBtn,
+    &focusDelayIncreaseBtn
+};
+// focusDelayMenu UIItems
+char   lfocusDelaymnu[] = "focus";
+UIItem focusDelayMenuLabel(lfocusDelaymnu);
+char   lFocusDelayTime[] = "00000";
+char *indicateFocusDelay()
+{
+    intToDisplayChar(focusDelay, lFocusDelayTime, LEFT_JUSTIFY);
+    return(lFocusDelayTime);
+}
+
+UIItem  focusDelayIndicator(lFocusDelayTime, indicateFocusDelay);
+UIItem *focusDelayMenuUIItems[2] = {
+    &focusDelayMenuLabel,
+    &focusDelayIndicator
+};
+Menu    focusDelayMenu
+(
+    focusDelayMenuButtons,
+    focusDelayMenuUIItems,
+    &lcd
+);
+
+// 11 - shutrdelay ------------------------------------
+void decreaseShutterDelay()
+{
+    if (shutterDelay >= 100)
+    {
+        shutterDelay -= 100;
+    }
+}
+
+MenuItem shutterDelayDecreaseBtn(lMINUS, decreaseShutterDelay, CLICKABLE, AUTOCLICKABLE);
+
+void increaseShutterDelay()
+{
+    shutterDelay += 100;
+}
+
+MenuItem shutterDelayIncreaseBtn(lPLUS, increaseShutterDelay, CLICKABLE, AUTOCLICKABLE);
+
+MenuItem *shutterDelayMenuButtons[4] =
+{
+    &backMtrBtn,
+    &blankMI,
+    &shutterDelayDecreaseBtn,
+    &shutterDelayIncreaseBtn
+};
+// shutterDelayMenu UIItems
+char   lshutterDelaymnu[] = "shutr";
+UIItem shutterDelayMenuLabel(lshutterDelaymnu);
+char   lShutterDelayTime[] = "00000";
+char *indicateShutterDelay()
+{
+    intToDisplayChar(shutterDelay, lShutterDelayTime, LEFT_JUSTIFY);
+    return(lShutterDelayTime);
+}
+
+UIItem  shutterDelayIndicator(lShutterDelayTime, indicateShutterDelay);
+UIItem *shutterDelayMenuUIItems[2] = {
+    &shutterDelayMenuLabel,
+    &shutterDelayIndicator
+};
+Menu    shutterDelayMenu
+(
+    shutterDelayMenuButtons,
+    shutterDelayMenuUIItems,
     &lcd
 );
 
@@ -923,10 +1063,12 @@ void takeShot()
     takingShot = true;
     allTheMenus[currentMenu]->display();
     Serial.println("Taking shot");     //TODO
-    // digitalWrite(SHUTTER_PIN, LOW);
-    //delay(500);
-    //digitalWrite(SHUTTER_PIN, HIGH);
-    delay(delayTime * 1000);
+    delay(preShotDelayTime);
+    digitalWrite(FOCUS_PIN, HIGH);
+    delay(focusDelay);
+    digitalWrite(SHUTTER_PIN, HIGH);
+    delay(shutterDelay);
+    digitalWrite(SHUTTER_PIN, LOW);
     currentShot++;
     takingShot = false;
 }
