@@ -33,7 +33,6 @@ void Menu::setItem(UIItem *itm, byte num) //oh, now I understand why overloading
 
 void Menu::display(void)
 {
-
     for (byte i = 0; i < 4; i++)
     {
         if (_menuItems[i]->canUpdate)
@@ -67,6 +66,11 @@ void Menu::click(byte theItem)
     _menuItems[theItem]->click();
 }
 
+void Menu::autoclick(byte theItem)
+{
+    _menuItems[theItem]->autoclick();
+}
+
 void Menu::_lcdPrintMenuItem(byte i)
 {
     _lcd->setCursor((i % 2) * (LCD_WIDTH - STRING_LENGTH + 1), byte(i / 2));
@@ -75,7 +79,7 @@ void Menu::_lcdPrintMenuItem(byte i)
 
 void Menu::_lcdPrintStaticItem(byte i)
 {
-    _lcd->setCursor(byte((LCD_WIDTH - STRING_LENGTH) / 2+1), i);
+    _lcd->setCursor(byte((LCD_WIDTH - STRING_LENGTH) / 2 + 1), i);
     _lcd->print(_staticItems[i]->getDisplayString());
 }
 

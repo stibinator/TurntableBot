@@ -14,6 +14,7 @@ public:
     void display(void);
     byte doItem(byte buttonPressed);
     void click(byte theClick);
+    void autoclick(byte theClick);
 private:
     MenuItem *_menuItems[4];
     UIItem *_staticItems[2];
