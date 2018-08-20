@@ -114,9 +114,9 @@ volatile bool         leadingEdge;
 volatile const unsigned long stepsPerRev = 99468;
 unsigned long shotsPerRev      = 12;
 unsigned long currentShot      = 0;
-int           preDelayTime = 3000;
-int           focusDelayTime       = 1000;
-int           shutterDelayTime     = 1000;
+int           preDelayTime     = 3000;
+int           focusDelayTime   = 1000;
+int           shutterDelayTime = 1000;
 //--------------------------------------------------------------------------------------
 // Init the LCD library with the LCD pins to be used
 LiquidCrystal lcd(8, 9, 4, 5, 6, 7);     //Pins for the freetronics 16x2 LCD shield.
@@ -386,6 +386,11 @@ Menu    directionMenu
 
 // 4 - motorMenu ------------------------------------
 // motorMenu buttons
+char     lDelayMnuBtn[] = "Delay";
+MenuItem delayMenuBtn(lDelayMnuBtn, []() {
+                      currentMenu = DELAYS_MENU;
+    }, CLICKABLE);
+
 char     lSpeed[] = "Speed";
 MenuItem speedMenuBtn(lSpeed, []() {
                       currentMenu = SPEED_MENU;
@@ -393,10 +398,6 @@ MenuItem speedMenuBtn(lSpeed, []() {
 char     lAccelMnuBtn[] = "Accel";
 MenuItem accelMenuBtn(lAccelMnuBtn, []() {
                       currentMenu = ACCEL_MENU;
-    }, CLICKABLE);
-char     lDelayMnuBtn[] = "Delay";
-MenuItem delayMenuBtn(lDelayMnuBtn, []() {
-                      currentMenu = DELAYS_MENU;
     }, CLICKABLE);
 
 MenuItem *motorMenuButtons[4] =
@@ -717,15 +718,15 @@ Menu manMenu
 // delaysMenu buttons
 char     lPre[] = "Pre  ";
 MenuItem preshotDelayMenuBtn(lPre, []() {
-                      currentMenu = PREDELAY_MENU;
+                             currentMenu = PREDELAY_MENU;
     }, CLICKABLE);
 char     lFocus[] = "Focus";
 MenuItem focusDelayMenuBtn(lFocus, []() {
-                          currentMenu = FOCUSDELAY_MENU;
+                           currentMenu = FOCUSDELAY_MENU;
     }, CLICKABLE);
 char     lShuttr[] = "Shuttr";
 MenuItem shuttrDelayMenuBtn(lShuttr, []() {
-                      currentMenu = SHUTTERDELAY_MENU;
+                            currentMenu = SHUTTERDELAY_MENU;
     }, CLICKABLE);
 
 MenuItem *delaysMenuButtons[4] =
@@ -746,15 +747,17 @@ UIItem *delaysMenuUIItems[2] =
 };
 Menu delaysMenu
 (
-    setupMenuButtons,
-    setupMenuUIItems,
+    delaysMenuButtons,
+    delaysMenuUIItems,
     &lcd
 );
 // 9 - predelay ------------------------------------
-void backToDelayMenu(){
+void backToDelayMenu()
+{
     currentMenu = DELAYS_MENU;
 }
-MenuItem  bactkToDelayMenuBtn(lBack, backToDelayMenu, CLICKABLE);
+
+MenuItem bactkToDelayMenuBtn(lBack, backToDelayMenu, CLICKABLE);
 
 void decreasePreDelay()
 {
@@ -769,8 +772,10 @@ void increasePreDelay()
 }
 
 MenuItem preDelayIncreaseBtn(lPLUS, increasePreDelay, CLICKABLE, AUTOCLICKABLE);
-char ldelayText[] = "delay";
-MenuItem delayLable(ldelayText, [](){return(ldelayText);});
+char     ldelayText[] = "delay";
+MenuItem delayLable(ldelayText, []() {
+                    return(ldelayText);
+    });
 MenuItem *preDelayMenuItems[4] =
 {
     &bactkToDelayMenuBtn,
@@ -813,7 +818,7 @@ void increaseFocusDelay()
     focusDelayTime += 100;
 }
 
-MenuItem focusDelayIncreaseBtn(lPLUS, increaseFocusDelay, CLICKABLE, AUTOCLICKABLE);
+MenuItem  focusDelayIncreaseBtn(lPLUS, increaseFocusDelay, CLICKABLE, AUTOCLICKABLE);
 MenuItem *focusDelayMenuItems[4] =
 {
     &bactkToDelayMenuBtn,
@@ -822,11 +827,13 @@ MenuItem *focusDelayMenuItems[4] =
     &focusDelayIncreaseBtn
 };
 // delayMenu UIItems
-char   lfocusDelayAF[] = "AF   ";
-char   lfocusDelayMF[] = "MF   ";
-char * switchAFMF(){
-    return((focusDelayTime>0)?lfocusDelayAF:lfocusDelayMF);
+char lfocusDelayAF[] = "AF   ";
+char lfocusDelayMF[] = "MF   ";
+char *switchAFMF()
+{
+    return((focusDelayTime > 0) ? lfocusDelayAF : lfocusDelayMF);
 }
+
 UIItem focusDelayMenuLabel(lfocusDelayAF, switchAFMF);
 char *indicateFocusDelayTime()
 {
@@ -859,7 +866,7 @@ void increaseShutterDelay()
     shutterDelayTime += 100;
 }
 
-MenuItem shutterDelayIncreaseBtn(lPLUS, increaseShutterDelay, CLICKABLE, AUTOCLICKABLE);
+MenuItem  shutterDelayIncreaseBtn(lPLUS, increaseShutterDelay, CLICKABLE, AUTOCLICKABLE);
 MenuItem *shutterDelayMenuItems[4] =
 {
     &bactkToDelayMenuBtn,
@@ -890,22 +897,21 @@ Menu    shutterDelayMenu
 
 
 
-
 // --------------------------------------------------------------------------------------------------------------------------
 Menu *allTheMenus[13] = {
-    &runMenu,
-    &mainMenu,
-    &setupMenu,
-    &directionMenu,
-    &motorMenu,
-    &speedMenu,
-    &accelMenu,
-    &shotsMenu,
-    &manMenu,
-    &delaysMenu,
-    &preDelayMenu,
-    &focusDelayMenu,
-    &shutterDelayMenu
+    &runMenu,         //0
+    &mainMenu,        //1
+    &setupMenu,       //2
+    &directionMenu,   //3
+    &motorMenu,       //4
+    &speedMenu,       //5
+    &accelMenu,       //6
+    &shotsMenu,       //7
+    &manMenu,         //8
+    &delaysMenu,      //9
+    &preDelayMenu,    //10
+    &focusDelayMenu,  //11
+    &shutterDelayMenu //12
 };
 
 void setup()
@@ -1070,11 +1076,15 @@ void takeShot()
     allTheMenus[currentMenu]->display();
     Serial.println("Taking shot");     //TODO
     delay(preDelayTime);
-    digitalWrite(FOCUS_PIN, HIGH);
-    delay(focusDelayTime);
+    if (focusDelayTime > 0)
+    {
+        digitalWrite(FOCUS_PIN, HIGH);
+        delay(focusDelayTime);
+    }
     digitalWrite(SHUTTER_PIN, HIGH);
     delay(shutterDelayTime);
     digitalWrite(SHUTTER_PIN, LOW);
+    digitalWrite(FOCUS_PIN, LOW);
     currentShot++;
     takingShot = false;
 }
