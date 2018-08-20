@@ -754,7 +754,7 @@ Menu delaysMenu
 void backToDelayMenu(){
     currentMenu = DELAYS_MENU;
 }
-MenuItem  bactkToDelayMenuBtn(lBack, backToDelayMenu);
+MenuItem  bactkToDelayMenuBtn(lBack, backToDelayMenu, CLICKABLE);
 
 void decreasePreDelay()
 {
