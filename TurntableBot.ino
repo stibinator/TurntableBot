@@ -9,11 +9,11 @@
 // Arduino defines
 #define STEP_CLOCKWISE       HIGH   // the value to set the dir_pin to when changing direction
 #define STEP_REVERSE         LOW
-#define DIR_PIN              13
-#define STEP_PIN             12
-#define ENABLE_PIN           11 //goes LOW to enable
-#define SHUTTER_PIN          3
-#define FOCUS_PIN            2
+#define DIR_PIN              2
+#define STEP_PIN             3
+#define FOCUS_PIN            11
+#define SHUTTER_PIN          12
+#define ENABLE_PIN           13 //goes LOW to enable
 
 #define BUTTON_ADC_PIN       A0     // A0 is the button ADC input
 #define LCD_BACKLIGHT_PIN    10     // D10 controls LCD backlight
@@ -40,10 +40,10 @@
 // #define STEPS_PER_REV         99468
 
 //return values for readButtons()
-#define BUTTON_TOPLEFT        0     //
-#define BUTTON_TOPRIGHT       1     //
-#define BUTTON_BOTTOMLEFT     2     //
-#define BUTTON_BOTTOMRIGHT    3     //
+#define BUTTON_TOPLEFT        3     //
+#define BUTTON_TOPRIGHT       2     //
+#define BUTTON_BOTTOMLEFT     1     //
+#define BUTTON_BOTTOMRIGHT    0    //
 #define BUTTON_SELECT         4     //
 #define BUTTON_NONE           5     //
 //some example macros with friendly labels for LCD backlight/pin control, tested and can be swapped into the example code as you like
@@ -922,13 +922,16 @@ void setup()
     leadingEdge = true;
     stepNumber  = 0;
     stepTarget  = stepsPerRev / shotsPerRev;
-    //button adc input
     pinMode(BUTTON_ADC_PIN, INPUT);        //ensure A0 is an input
     digitalWrite(BUTTON_ADC_PIN, LOW);     //ensure pullup is off on A0
     //lcd backlight control
     digitalWrite(LCD_BACKLIGHT_PIN, HIGH); //backlight control pin D10 is high (on)
     pinMode(LCD_BACKLIGHT_PIN, OUTPUT);    //D10 is an output
     //set up the LCD number of columns and rows:
+    //button adc input
+    pinMode(FOCUS_PIN, OUTPUT);
+    pinMode(SHUTTER_PIN, OUTPUT);
+
     lcd.begin(16, 2);
     motorSpeed  = 0.0;
     targetSpeed = 0.0;
