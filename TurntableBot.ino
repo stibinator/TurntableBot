@@ -980,8 +980,13 @@ void loop()
     }
     // Serial.print("tarsp:");
     // Serial.print(targetSpeed);
-    // Serial.print(" mtrSp:");
-    // Serial.print(motorSpeed);
+    // Serial.print(" ");
+    if (targetSpeed > 0 || motorSpeed > 0)
+    {
+        Serial.print(OCR1A);
+        Serial.print(" ");
+        Serial.println(motorSpeed);
+    }
     // Serial.print(" mtrSt:");
     // Serial.print(motorState);
     // Serial.print(" opSt:");
@@ -992,7 +997,8 @@ void loop()
     // Serial.print(stepNumber);
     // Serial.print(" Shot:");
     // Serial.println(currentShot);
-    if (operationState == STOPPED){
+    if (operationState == STOPPED)
+    {
         digitalWrite(ENABLE_PIN, DISABLE);
     }
 }
@@ -1001,6 +1007,7 @@ void loop()
 ISR(TIMER1_COMPA_vect)
 {
     if (targetSpeed > 0 || motorSpeed > 0)
+    // running, or should be running
     {
         // leading edge of the step cycle
         if (leadingEdge)
@@ -1022,12 +1029,12 @@ ISR(TIMER1_COMPA_vect)
             }
 
             // check speed and adjust if necesary
-            else if (motorSpeed < targetSpeed)
-            {
+            if (motorSpeed < targetSpeed)
+            { // add to the motor speed up to targetSpeed
                 motorSpeed = min(motorSpeed + accelerationIncrement, targetSpeed);
             }
             else if (motorSpeed > targetSpeed)
-            {
+            { //subtract from motorSpeed down to targetSpeed
                 motorSpeed = max(motorSpeed - accelerationIncrement, targetSpeed);
             }
 
@@ -1041,6 +1048,7 @@ ISR(TIMER1_COMPA_vect)
         }
     }
     else
+    // not running
     {
         // motorSpeed == 0 && targetSpeed == 0
         motorState = STOPPED;
