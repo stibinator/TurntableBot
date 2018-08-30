@@ -7,137 +7,149 @@
 #include <avr/io.h>
 
 // Arduino defines
-#define STEP_CLOCKWISE       HIGH   // the value to set the dir_pin to when changing direction
-#define STEP_REVERSE         LOW
-#define DIR_PIN              2
-#define STEP_PIN             3
-#define FOCUS_PIN            11
-#define SHUTTER_PIN          12
-#define ENABLE_PIN           13 //goes LOW to enable
+#define STEP_CLOCKWISE HIGH // the value to set the dir_pin to when changing direction
+#define STEP_REVERSE LOW
+#define ENABLE LOW
+#define DISABLE HIGH
+#define DIR_PIN 2 //the available pins on the LCD shield are 0,1,2,3,11,12,13
+#define STEP_PIN 3
+#define FOCUS_PIN 11
+#define SHUTTER_PIN 12
+#define ENABLE_PIN 13 //goes LOW to enable
 
-#define BUTTON_ADC_PIN       A0     // A0 is the button ADC input
-#define LCD_BACKLIGHT_PIN    10     // D10 controls LCD backlight
+#define BUTTON_ADC_PIN A0    // A0 is the button ADC input
+#define LCD_BACKLIGHT_PIN 10 // D10 controls LCD backlight
 // ADC readings expected for the 5 buttons on the ADC input
-#define RIGHT_10BIT_ADC      0      // right
-#define UP_10BIT_ADC         100    // up
-#define DOWN_10BIT_ADC       256    // down
-#define LEFT_10BIT_ADC       408    // left
-#define SELECT_10BIT_ADC     640    // right
-#define BUTTONHYSTERESIS     40     // hysteresis for valid button sensing window
+#define RIGHT_10BIT_ADC 0    // right
+#define UP_10BIT_ADC 100     // up
+#define DOWN_10BIT_ADC 256   // down
+#define LEFT_10BIT_ADC 408   // left
+#define SELECT_10BIT_ADC 640 // right
+#define BUTTONHYSTERESIS 40  // hysteresis for valid button sensing window
 
 // motorState constants
-#define STOPPED              0 //also used as operation state
-#define ACCELERATING         1
-#define RUNNING              2
-#define DECELERATING         3
+#define STOPPED 0 //also used as operation state
+#define ACCELERATING 1
+#define RUNNING 2
+#define DECELERATING 3
 
 // operation state constants
 // #define STOPPED              0 //defined already
-#define RUNNING_AUTO        1
-#define RUNNING_MAN         2
+#define RUNNING_AUTO 1
+#define RUNNING_MAN 2
 
-#define STEPS_PER_DEGREE    273.6   // 76 * 360 / 100
+#define STEPS_PER_DEGREE 273.6 // 76 * 360 / 100
 // #define STEPS_PER_REV         99468
 
 //return values for readButtons()
-#define BUTTON_TOPLEFT        3     //
-#define BUTTON_TOPRIGHT       2     //
-#define BUTTON_BOTTOMLEFT     1     //
-#define BUTTON_BOTTOMRIGHT    0    //
-#define BUTTON_SELECT         4     //
-#define BUTTON_NONE           5     //
+#define BUTTON_TOPLEFT 3     //
+#define BUTTON_TOPRIGHT 2    //
+#define BUTTON_BOTTOMLEFT 1  //
+#define BUTTON_BOTTOMRIGHT 0 //
+#define BUTTON_SELECT 4      //
+#define BUTTON_NONE 5        //
 //some example macros with friendly labels for LCD backlight/pin control, tested and can be swapped into the example code as you like
-#define LCD_BACKLIGHT_OFF()     digitalWrite(LCD_BACKLIGHT_PIN, LOW)
-#define LCD_BACKLIGHT_ON()      digitalWrite(LCD_BACKLIGHT_PIN, HIGH)
-#define LCD_BACKLIGHT(state)    { if (state) { digitalWrite(LCD_BACKLIGHT_PIN, HIGH); }else{ digitalWrite(LCD_BACKLIGHT_PIN, LOW); } }
+#define LCD_BACKLIGHT_OFF() digitalWrite(LCD_BACKLIGHT_PIN, LOW)
+#define LCD_BACKLIGHT_ON() digitalWrite(LCD_BACKLIGHT_PIN, HIGH)
+#define LCD_BACKLIGHT(state)                       \
+    {                                              \
+        if (state)                                 \
+        {                                          \
+            digitalWrite(LCD_BACKLIGHT_PIN, HIGH); \
+        }                                          \
+        else                                       \
+        {                                          \
+            digitalWrite(LCD_BACKLIGHT_PIN, LOW);  \
+        }                                          \
+    }
 // directions
-#define CLOCKWISE               0
-#define COUNTERCW               1
+#define CLOCKWISE 0
+#define COUNTERCW 1
 // Menus
-#define RUN_MENU                0
-#define MAIN_MENU               1
-#define SETUP_MENU              2
-#define DIRECTION_MENU          3
-#define MOTOR_MENU              4
-#define SPEED_MENU              5
-#define ACCEL_MENU              6
-#define STEPS_MENU              7
-#define MANUAL_MENU             8
-#define DELAYS_MENU             9
-#define PREDELAY_MENU           10
-#define FOCUSDELAY_MENU         11
-#define SHUTTERDELAY_MENU       12
+#define RUN_MENU 0
+#define MAIN_MENU 1
+#define SETUP_MENU 2
+#define DIRECTION_MENU 3
+#define MOTOR_MENU 4
+#define SPEED_MENU 5
+#define ACCEL_MENU 6
+#define STEPS_MENU 7
+#define MANUAL_MENU 8
+#define DELAYS_MENU 9
+#define PREDELAY_MENU 10
+#define FOCUSDELAY_MENU 11
+#define SHUTTERDELAY_MENU 12
 
+#define CLICKABLE true
+#define AUTOCLICKABLE true
+#define LEFT_JUSTIFY true
+#define RIGHT_JUSTIFY false
+#define MAX_STEPS_PER_SECOND 600
+#define MIN_STEPS_PER_SECOND 8
 
-#define CLICKABLE               true
-#define AUTOCLICKABLE           true
-#define LEFT_JUSTIFY            true
-#define RIGHT_JUSTIFY           false
-#define MAX_STEPS_PER_SECOND    600
-#define MIN_STEPS_PER_SECOND    8
+#define BUTTON_LONG_PRESS 1000
+#define BUTTON_REPEAT_TIME 1000
 
-#define BUTTON_LONG_PRESS       1000
-#define BUTTON_REPEAT_TIME      1000
-
-#define interruptDuration       0.000064
+#define interruptDuration 0.000064
 
 /*--------------------------------------------------------------------------------------
  *  Variables
  *  --------------------------------------------------------------------------------------*/
-bool          buttonJustPressed  = false;                                               //this will be true after a readButtons() call if triggered
-bool          buttonJustReleased = false;                                               //this will be true after a readButtons() call if triggered
-bool          buttonAutoClicked  = false;
-byte          buttonWas          = BUTTON_NONE;                                         //used by readButtons() for detection of button events
-byte          button             = BUTTON_NONE;
-unsigned long btnPressMillis     = 0;                                                   //time the last button was pressed
-unsigned long btnHoldTime        = 0;                                                   //how long the button has been held for
-unsigned long lastAutoPressMs    = 0;                                                   // counts untill next auto click
-volatile int  motorSpeed         = 0;                                                   //normalised speed motor is currently at, goes from 0→1
-volatile int  targetSpeed        = 0;                                                   //normalised speed motor is aiming for, goes from 0→1
-volatile int  maxSpeed           = 10000;                                               //TODO check floats
+bool buttonJustPressed = false;  //this will be true after a readButtons() call if triggered
+bool buttonJustReleased = false; //this will be true after a readButtons() call if triggered
+bool buttonAutoClicked = false;
+byte buttonWas = BUTTON_NONE; //used by readButtons() for detection of button events
+byte button = BUTTON_NONE;
+unsigned long btnPressMillis = 0;  //time the last button was pressed
+unsigned long btnHoldTime = 0;     //how long the button has been held for
+unsigned long lastAutoPressMs = 0; // counts untill next auto click
+volatile int motorSpeed = 0;       //normalised speed motor is currently at, goes from 0→1
+volatile int targetSpeed = 0;      //normalised speed motor is aiming for, goes from 0→1
+volatile int maxSpeed = 10000;     //TODO check floats
 // When interuptLoopCount == 1 interrupt every ≈ 64 µs. There are two interrupts per step
-int          stepsPerSecond       = 500;                                                //the max speed of the stepper
-int          maxInterruptsPerStep = 1 / (MIN_STEPS_PER_SECOND * 2 * interruptDuration); // 8 steps/second.
-volatile int minInterruptsPerStep = 1 / (stepsPerSecond * 2 * interruptDuration);       // 500 steps/second.
-int          rampSteps            = 1000;                                               // number of steps needed to get to full speed
+int stepsPerSecond = 500;                                                         //the max speed of the stepper
+int maxInterruptsPerStep = 1 / (MIN_STEPS_PER_SECOND * 2 * interruptDuration);    // 8 steps/second.
+volatile int minInterruptsPerStep = 1 / (stepsPerSecond * 2 * interruptDuration); // 500 steps/second.
+int rampSteps = 1000;                                                             // number of steps needed to get to full speed
 //reduce the number of calculations we need to do in the interrupt handler
-volatile int          accelerationIncrement = maxSpeed / rampSteps;
-volatile int          stepDiff       = maxInterruptsPerStep - minInterruptsPerStep;
-volatile byte         motorState     = STOPPED;
-volatile byte         operationState = STOPPED;
-bool                  takingShot     = false;
-volatile unsigned int stepDirection;     //HIGH and LOW are u_ints
-volatile int          stepNumber;
-volatile int          stepTarget;
-volatile bool         leadingEdge;
+volatile int accelerationIncrement = maxSpeed / rampSteps;
+volatile int stepDiff = maxInterruptsPerStep - minInterruptsPerStep;
+volatile byte motorState = STOPPED;
+volatile byte operationState = STOPPED;
+bool takingShot = false;
+volatile unsigned int stepDirection; //HIGH and LOW are u_ints
+volatile int stepNumber;
+volatile int stepTarget;
+volatile bool leadingEdge;
 // auto run parameters
 volatile const unsigned long stepsPerRev = 99468;
-unsigned long shotsPerRev      = 12;
-unsigned long currentShot      = 0;
-int           preDelayTime     = 3000;
-int           focusDelayTime   = 1000;
-int           shutterDelayTime = 1000;
+unsigned long shotsPerRev = 12;
+unsigned long currentShot = 0;
+int preDelayTime = 3000;
+int focusDelayTime = 1000;
+int shutterDelayTime = 1000;
 //--------------------------------------------------------------------------------------
 // Init the LCD library with the LCD pins to be used
-LiquidCrystal lcd(8, 9, 4, 5, 6, 7);     //Pins for the freetronics 16x2 LCD shield.
+LiquidCrystal lcd(8, 9, 4, 5, 6, 7); //Pins for the freetronics 16x2 LCD shield.
 //--------------------------------------------------------------------------------------
 
-byte direction   = CLOCKWISE;
+byte direction = CLOCKWISE;
 byte currentMenu = RUN_MENU;
 
 void toggleAutoRun()
 {
     if (operationState != RUNNING_AUTO)
     {
+        digitalWrite(ENABLE_PIN, ENABLE);
         operationState = RUNNING_AUTO;
-        stepTarget     = stepsPerRev / shotsPerRev;
-        stepNumber     = 0;
-        currentShot    = 0;
-        targetSpeed    = maxSpeed;
+        stepTarget = stepsPerRev / shotsPerRev;
+        stepNumber = 0;
+        currentShot = 0;
+        targetSpeed = maxSpeed;
     }
     else
     {
-        targetSpeed    = 0;
+        targetSpeed = 0;
         operationState = STOPPED;
     }
 }
@@ -153,7 +165,7 @@ void stopMotor()
 void intToDisplayChar(int theInt, char theChars[STRING_LENGTH], bool justify)
 {
     String s = String(theInt);
-    byte   n = min(s.length(), STRING_LENGTH);
+    byte n = min(s.length(), STRING_LENGTH);
 
     if (justify)
     {
@@ -189,7 +201,7 @@ void intToDisplayChar(int theInt, char theChars[STRING_LENGTH], bool justify)
 
 // blank menuItem
 MenuItem blankMI;
-UIItem   blankUII;
+UIItem blankUII;
 // 0 - runMenu ------------------------------------
 // runMenu buttons
 void gotoMainMenuIfNotRunning()
@@ -200,233 +212,227 @@ void gotoMainMenuIfNotRunning()
     }
 }
 
-char lMenu[]     = "Menu ";
+char lMenu[] = "Menu ";
 char greyedOut[] = "     ";
 char *updateMainMenuButton()
 // grey out the menu button if the motor is running
 {
-    return((operationState == STOPPED) ? lMenu : greyedOut);
+    return ((operationState == STOPPED) ? lMenu : greyedOut);
 }
 
 MenuItem mainMenuBtn(lMenu, gotoMainMenuIfNotRunning, updateMainMenuButton, CLICKABLE);
 
 char lSTART[] = "START";
-char lSTOP[]  = " STOP";
+char lSTOP[] = " STOP";
 char *updateStartBtn()
 {
-    return((operationState == STOPPED) ? lSTART : lSTOP);
+    return ((operationState == STOPPED) ? lSTART : lSTOP);
 }
 
 MenuItem startBtn(lSTART, toggleAutoRun, updateStartBtn, CLICKABLE);
-char     lShotCount[] = "    0";
+char lShotCount[] = "    0";
 char *countShots()
 {
     intToDisplayChar(currentShot, lShotCount, RIGHT_JUSTIFY);
-    return(lShotCount);
+    return (lShotCount);
 }
 
 MenuItem shotCounter(lShotCount, countShots);
-char     lCounter[] = "00000";
+char lCounter[] = "00000";
 char *shotsIndicate()
 {
     intToDisplayChar(shotsPerRev, lCounter, LEFT_JUSTIFY);
-    return(lCounter);
+    return (lCounter);
 }
 
-MenuItem  shotsIndicator(lCounter, shotsIndicate);
+MenuItem shotsIndicator(lCounter, shotsIndicate);
 MenuItem *runMenuButtons[4] =
-{
-    &mainMenuBtn,
-    &startBtn,
-    &shotCounter,
-    &shotsIndicator
-};
+    {
+        &mainMenuBtn,
+        &startBtn,
+        &shotCounter,
+        &shotsIndicator};
 // runMenu UIItems
-char motorIndicatorFrames[9][STRING_LENGTH] = { "<||  ", "<-+- ", "<-=- ", "<-|- ", " ||> ", "-+-> ", "-=-> ", "-|-> ", ">[o]<" };
+char motorIndicatorFrames[9][STRING_LENGTH] = {"<||  ", "<-+- ", "<-=- ", "<-|- ", " ||> ", "-+-> ", "-=-> ", "-|-> ", ">[o]<"};
 char *motorIndicate()
 {
     if (takingShot)
     {
-        return(motorIndicatorFrames[8]);
+        return (motorIndicatorFrames[8]);
     }
     else
     {
-        return(motorIndicatorFrames[motorState + (4 * direction)]);
+        return (motorIndicatorFrames[motorState + (4 * direction)]);
     }
 }
 
-UIItem  motorStateIndicator(motorIndicatorFrames[0], motorIndicate);
-char    lSlash[] = "  /  ";
-UIItem  slash(lSlash);
+UIItem motorStateIndicator(motorIndicatorFrames[0], motorIndicate);
+char lSlash[] = "  /  ";
+UIItem slash(lSlash);
 UIItem *runMenuUIItems[2] =
-{
-    &motorStateIndicator,
-    &slash
-};
-Menu runMenu
-(
+    {
+        &motorStateIndicator,
+        &slash};
+Menu runMenu(
     runMenuButtons,
     runMenuUIItems,
-    &lcd
-);
+    &lcd);
 
 // 1 - mainMenu ------------------------------------
 // mainMenu buttons
-char     lAuto[] = "Auto ";
+char lAuto[] = "Auto ";
 MenuItem runMenuBtn(lAuto, []() {
-                    currentMenu = RUN_MENU;
-    }, CLICKABLE);
-char     lMan[] = "  Man";
+    currentMenu = RUN_MENU;
+},
+                    CLICKABLE);
+char lMan[] = "  Man";
 MenuItem manualMenuBtn(lMan, []() {
-                       currentMenu = MANUAL_MENU;
-    }, CLICKABLE);
-char     lSetup[] = "Setup";
+    currentMenu = MANUAL_MENU;
+},
+                       CLICKABLE);
+char lSetup[] = "Setup";
 MenuItem setupMenuBtn(lSetup, []() {
-                      currentMenu = SETUP_MENU;
-    }, CLICKABLE);
+    currentMenu = SETUP_MENU;
+},
+                      CLICKABLE);
 
 MenuItem *mainMenuButtons[4] =
-{
-    &runMenuBtn,
-    &manualMenuBtn,
-    &setupMenuBtn,
-    &blankMI
-};
+    {
+        &runMenuBtn,
+        &manualMenuBtn,
+        &setupMenuBtn,
+        &blankMI};
 // mainMenu UIItems
 UIItem *mainMenuUIItems[2] =
-{
-    &blankUII,
-    &blankUII
-};
-Menu mainMenu
-(
+    {
+        &blankUII,
+        &blankUII};
+Menu mainMenu(
     mainMenuButtons,
     mainMenuUIItems,
-    &lcd
-);
+    &lcd);
 
 // 2 - setupMenu ------------------------------------
 // setupMenu buttons
-char     lMotr[] = "Motor";
+char lMotr[] = "Motor";
 MenuItem motorMenuBtn(lMotr, []() {
-                      currentMenu = MOTOR_MENU;
-    }, CLICKABLE);
-char     lDir[] = "Dir  ";
+    currentMenu = MOTOR_MENU;
+},
+                      CLICKABLE);
+char lDir[] = "Dir  ";
 MenuItem directionMenuBtn(lDir, []() {
-                          currentMenu = DIRECTION_MENU;
-    }, CLICKABLE);
-char     lSteps[] = "Shots";
+    currentMenu = DIRECTION_MENU;
+},
+                          CLICKABLE);
+char lSteps[] = "Shots";
 MenuItem stepsMenuBtn(lSteps, []() {
-                      currentMenu = STEPS_MENU;
-    }, CLICKABLE);
+    currentMenu = STEPS_MENU;
+},
+                      CLICKABLE);
 
 MenuItem *setupMenuButtons[4] =
-{
-    &mainMenuBtn,
-    &motorMenuBtn,
-    &directionMenuBtn,
-    &stepsMenuBtn,
+    {
+        &mainMenuBtn,
+        &motorMenuBtn,
+        &directionMenuBtn,
+        &stepsMenuBtn,
 };
 
 // setupMenu UIItems
-char    lset[] = "set  ";
-UIItem  setupMnuLabel(lset);
+char lset[] = "set  ";
+UIItem setupMnuLabel(lset);
 UIItem *setupMenuUIItems[2] =
-{
-    &setupMnuLabel,
-    &blankUII
-};
-Menu setupMenu
-(
+    {
+        &setupMnuLabel,
+        &blankUII};
+Menu setupMenu(
     setupMenuButtons,
     setupMenuUIItems,
-    &lcd
-);
+    &lcd);
 
 // 3 - directionMenu ------------------------------------
 // directionMenu buttons
-char     lBack[] = "<Back";
+char lBack[] = "<Back";
 MenuItem backSetupBtn(lBack, []() {
-                      currentMenu = SETUP_MENU;
-    }, CLICKABLE);
-char     lCW[] = "[<]  ";
-MenuItem dirCWBtn(lCW, [] () {
-                  direction = CLOCKWISE;
-    }, CLICKABLE);
-char     lCCW[] = "  [>]";
-MenuItem dirCCBtn(lCCW, [] () {
-                  direction = COUNTERCW;
-    }, CLICKABLE);
+    currentMenu = SETUP_MENU;
+},
+                      CLICKABLE);
+char lCW[] = "[<]  ";
+MenuItem dirCWBtn(lCW, []() {
+    direction = CLOCKWISE;
+},
+                  CLICKABLE);
+char lCCW[] = "  [>]";
+MenuItem dirCCBtn(lCCW, []() {
+    direction = COUNTERCW;
+},
+                  CLICKABLE);
 
 MenuItem *directionMenuButtons[4] =
-{
-    &backSetupBtn,
-    &blankMI,
-    &dirCWBtn,
-    &dirCCBtn
-};
+    {
+        &backSetupBtn,
+        &blankMI,
+        &dirCWBtn,
+        &dirCCBtn};
 // directionMenu UIItems
-char   ldir[] = " dir ";
+char ldir[] = " dir ";
 UIItem dirMenuLabel(ldir);
-char   dirIndicatorFrames[2][STRING_LENGTH] = { "<-CW-", "CCW->" };
+char dirIndicatorFrames[2][STRING_LENGTH] = {"<-CW-", "CCW->"};
 UIItem directionIndicator(
-    dirIndicatorFrames[direction], [] () {
-    return(dirIndicatorFrames[direction]);
+    dirIndicatorFrames[direction], []() {
+        return (dirIndicatorFrames[direction]);
     });
 UIItem *directionMenuUIItems[2] = {
     &dirMenuLabel,
-    &directionIndicator
-};
-Menu    directionMenu
-(
+    &directionIndicator};
+Menu directionMenu(
     directionMenuButtons,
     directionMenuUIItems,
-    &lcd
-);
+    &lcd);
 
 // 4 - motorMenu ------------------------------------
 // motorMenu buttons
-char     lDelayMnuBtn[] = "Delay";
+char lDelayMnuBtn[] = "Delay";
 MenuItem delayMenuBtn(lDelayMnuBtn, []() {
-                      currentMenu = DELAYS_MENU;
-    }, CLICKABLE);
+    currentMenu = DELAYS_MENU;
+},
+                      CLICKABLE);
 
-char     lSpeed[] = "Speed";
+char lSpeed[] = "Speed";
 MenuItem speedMenuBtn(lSpeed, []() {
-                      currentMenu = SPEED_MENU;
-    }, CLICKABLE);
-char     lAccelMnuBtn[] = "Accel";
+    currentMenu = SPEED_MENU;
+},
+                      CLICKABLE);
+char lAccelMnuBtn[] = "Accel";
 MenuItem accelMenuBtn(lAccelMnuBtn, []() {
-                      currentMenu = ACCEL_MENU;
-    }, CLICKABLE);
+    currentMenu = ACCEL_MENU;
+},
+                      CLICKABLE);
 
 MenuItem *motorMenuButtons[4] =
-{
-    &backSetupBtn,
-    &delayMenuBtn,
-    &speedMenuBtn,
-    &accelMenuBtn
-};
+    {
+        &backSetupBtn,
+        &delayMenuBtn,
+        &speedMenuBtn,
+        &accelMenuBtn};
 // motorMenu UIItems
-char    lmotor[] = "motor";
-UIItem  motorMenuLabel(lmotor);
+char lmotor[] = "motor";
+UIItem motorMenuLabel(lmotor);
 UIItem *motorMenuUIItems[2] = {
     &motorMenuLabel,
-    &blankUII
-};
-Menu    motorMenu
-(
+    &blankUII};
+Menu motorMenu(
     motorMenuButtons,
     motorMenuUIItems,
-    &lcd
-);
+    &lcd);
 
 // 5 - speed ------------------------------------
 // speedMenu buttons
 // char lBack[] = "<Back";
 MenuItem backMtrBtn(lBack, []() {
-                    currentMenu = MOTOR_MENU;
-    }, CLICKABLE);
+    currentMenu = MOTOR_MENU;
+},
+                    CLICKABLE);
 char lMINUS[] = "[-]  ";
 void maxSpeedDecrease()
 {
@@ -444,33 +450,29 @@ void maxSpeedIncrease()
 MenuItem speedUpBtn(lPLUS, maxSpeedIncrease, CLICKABLE, AUTOCLICKABLE);
 
 MenuItem *speedMenuButtons[4] =
-{
-    &backMtrBtn,
-    &blankMI,
-    &slowDownBtn,
-    &speedUpBtn
-};
+    {
+        &backMtrBtn,
+        &blankMI,
+        &slowDownBtn,
+        &speedUpBtn};
 // speedMenu UIItems
-char   lspeedmnu[] = "speed";
+char lspeedmnu[] = "speed";
 UIItem speedMenuLabel(lspeedmnu);
 // char   lCounter[] = "00000";
 char *speedIndicate()
 {
     intToDisplayChar(stepsPerSecond, lCounter, RIGHT_JUSTIFY);
-    return(lCounter);
+    return (lCounter);
 }
 
-UIItem  speedIndicator(lCounter, (speedIndicate));
+UIItem speedIndicator(lCounter, (speedIndicate));
 UIItem *speedMenuUIItems[2] = {
     &speedMenuLabel,
-    &speedIndicator
-};
-Menu    speedMenu
-(
+    &speedIndicator};
+Menu speedMenu(
     speedMenuButtons,
     speedMenuUIItems,
-    &lcd
-);
+    &lcd);
 
 // 6 - accel ------------------------------------
 // accelMenu buttons
@@ -492,33 +494,29 @@ void accelDecrease()
 MenuItem accelDecreaseBtn(lPLUS, accelDecrease, CLICKABLE, AUTOCLICKABLE);
 
 MenuItem *accelMenuButtons[4] =
-{
-    &backMtrBtn,
-    &blankMI,
-    &accelIncreaseBtn,
-    &accelDecreaseBtn
-};
+    {
+        &backMtrBtn,
+        &blankMI,
+        &accelIncreaseBtn,
+        &accelDecreaseBtn};
 // accelMenu UIItems
-char   laccelmnu[] = "accel";
+char laccelmnu[] = "accel";
 UIItem accelMenuLabel(laccelmnu);
 // char   lCounter[] = "00000";
 char *accelIndicate()
 {
     intToDisplayChar(rampSteps, lCounter, RIGHT_JUSTIFY);
-    return(lCounter);
+    return (lCounter);
 }
 
-UIItem  accelIndicator(lCounter, accelIndicate);
+UIItem accelIndicator(lCounter, accelIndicate);
 UIItem *accelMenuUIItems[2] = {
     &accelMenuLabel,
-    &accelIndicator
-};
-Menu    accelMenu
-(
+    &accelIndicator};
+Menu accelMenu(
     accelMenuButtons,
     accelMenuUIItems,
-    &lcd
-);
+    &lcd);
 
 // 7 - shots ------------------------------------
 // shotsMenu buttons
@@ -540,30 +538,26 @@ void shotsDecrease()
 MenuItem shotsDecreaseBtn(lPLUS, shotsDecrease, CLICKABLE, AUTOCLICKABLE);
 
 MenuItem *shotsMenuButtons[4] =
-{
-    &backSetupBtn,
-    &blankMI,
-    &shotsIncreaseBtn,
-    &shotsDecreaseBtn
-};
+    {
+        &backSetupBtn,
+        &blankMI,
+        &shotsIncreaseBtn,
+        &shotsDecreaseBtn};
 // shotsMenu UIItems
-char   lshotsmnu[] = "shots";
+char lshotsmnu[] = "shots";
 UIItem shotsMenuLabel(lshotsmnu);
 // char   lCounter[] = "00000";
-UIItem shotsIndicatorUI(lCounter, [] () {
-                        intToDisplayChar(shotsPerRev, lCounter, LEFT_JUSTIFY);
-                        return(lCounter);
-    });                                                   //TODO sprintf function
+UIItem shotsIndicatorUI(lCounter, []() {
+    intToDisplayChar(shotsPerRev, lCounter, LEFT_JUSTIFY);
+    return (lCounter);
+}); //TODO sprintf function
 UIItem *shotsMenuUIItems[2] = {
     &shotsMenuLabel,
-    &shotsIndicatorUI
-};
-Menu    shotsMenu
-(
+    &shotsIndicatorUI};
+Menu shotsMenu(
     shotsMenuButtons,
     shotsMenuUIItems,
-    &lcd
-);
+    &lcd);
 
 // 8 - manMenu ------------------------------------
 // manMenu buttons
@@ -584,7 +578,7 @@ void manStopStart()
 
 char *updateManStopButton()
 {
-    return((motorState) ? lSTOP : lSHOOT);
+    return ((motorState) ? lSTOP : lSHOOT);
 }
 
 MenuItem stopBtn(lSTOP, manStopStart, updateManStopButton, CLICKABLE);
@@ -611,7 +605,7 @@ void runCW()
     {
         direction = CLOCKWISE;
         digitalWrite(DIR_PIN, direction);
-        targetSpeed    = maxSpeed / 2;
+        targetSpeed = maxSpeed / 2;
         operationState = RUNNING_MAN;
     }
 }
@@ -623,16 +617,16 @@ char *updateCWBtn()
     {
         if (direction == CLOCKWISE)
         {
-            return(lPLUSL);
+            return (lPLUSL);
         }
         else
         {
-            return(lMINUS);
+            return (lMINUS);
         }
     }
     else
     {
-        return(lCW);
+        return (lCW);
     }
 }
 
@@ -674,83 +668,80 @@ char *updateCCWBtn()
     {
         if (direction == COUNTERCW)
         {
-            return(lPLUS);
+            return (lPLUS);
         }
         else
         {
-            return(lMINUSR);
+            return (lMINUSR);
         }
     }
     else
     {
-        return(lCCW);
+        return (lCCW);
     }
 }
 
-MenuItem  runCCWBtn(lCCW, runCCW, updateCCWBtn, CLICKABLE, AUTOCLICKABLE);
+MenuItem runCCWBtn(lCCW, runCCW, updateCCWBtn, CLICKABLE, AUTOCLICKABLE);
 MenuItem *manMenuButtons[4] =
-{
-    &mainMenuBtn,
-    &stopBtn,
-    &runCWBtn,
-    &runCCWBtn,
+    {
+        &mainMenuBtn,
+        &stopBtn,
+        &runCWBtn,
+        &runCCWBtn,
 };
 // manMenu UIItems
-char   lmanMnu[] = "man  ";
+char lmanMnu[] = "man  ";
 UIItem manMenuLabel(lmanMnu);
 // char motorIndicatorFrames[8][STRING_LENGTH] = { " ||  ", " <+  ", " +>  ", " <=  ", " =>  ", " <-  ", " ->  " };
 // UIItem motorStateIndicator(motorIndicatorFrames[0], , []() {return(motorIndicatorFrames[motorState * (1 + direction)]);});
 UIItem *manMenuUIItems[2] =
-{
-    &manMenuLabel,
-    &motorStateIndicator
-};
+    {
+        &manMenuLabel,
+        &motorStateIndicator};
 
-Menu manMenu
-(
+Menu manMenu(
     manMenuButtons,
     manMenuUIItems,
-    &lcd
-);
+    &lcd);
 
 // TODO
 // 2 - delaysMenu ------------------------------------
 // delaysMenu buttons
-char     lPre[] = "Pre  ";
+char lPre[] = "Pre  ";
 MenuItem preshotDelayMenuBtn(lPre, []() {
-                             currentMenu = PREDELAY_MENU;
-    }, CLICKABLE);
-char     lFocus[] = "Focus";
+    currentMenu = PREDELAY_MENU;
+},
+                             CLICKABLE);
+char lFocus[] = "Focus";
 MenuItem focusDelayMenuBtn(lFocus, []() {
-                           currentMenu = FOCUSDELAY_MENU;
-    }, CLICKABLE);
-char     lShuttr[] = "Shuttr";
+    currentMenu = FOCUSDELAY_MENU;
+},
+                           CLICKABLE);
+char lShuttr[] = "Shuttr";
 MenuItem shuttrDelayMenuBtn(lShuttr, []() {
-                            currentMenu = SHUTTERDELAY_MENU;
-    }, CLICKABLE);
+    currentMenu = SHUTTERDELAY_MENU;
+},
+                            CLICKABLE);
 
 MenuItem *delaysMenuButtons[4] =
-{
-    &setupMenuBtn,
-    &preshotDelayMenuBtn,
-    &focusDelayMenuBtn,
-    &shuttrDelayMenuBtn,
+    {
+        &setupMenuBtn,
+        &preshotDelayMenuBtn,
+        &focusDelayMenuBtn,
+        &shuttrDelayMenuBtn,
 };
 
 // delaysMenu UIItems
-char    ldelay[] = "delay";
-UIItem  delaysMnuLabel(ldelay);
+char ldelay[] = "delay";
+UIItem delaysMnuLabel(ldelay);
 UIItem *delaysMenuUIItems[2] =
-{
-    &delaysMnuLabel,
-    &blankUII
-};
-Menu delaysMenu
-(
+    {
+        &delaysMnuLabel,
+        &blankUII};
+Menu delaysMenu(
     delaysMenuButtons,
     delaysMenuUIItems,
-    &lcd
-);
+    &lcd);
 // 9 - predelay ------------------------------------
 void backToDelayMenu()
 {
@@ -772,38 +763,34 @@ void increasePreDelay()
 }
 
 MenuItem preDelayIncreaseBtn(lPLUS, increasePreDelay, CLICKABLE, AUTOCLICKABLE);
-char     ldelayText[] = "delay";
+char ldelayText[] = "delay";
 MenuItem delayLable(ldelayText, []() {
-                    return(ldelayText);
-    });
+    return (ldelayText);
+});
 MenuItem *preDelayMenuItems[4] =
-{
-    &bactkToDelayMenuBtn,
-    &delayLable,
-    &preDelayDecreaseBtn,
-    &preDelayIncreaseBtn
-};
+    {
+        &bactkToDelayMenuBtn,
+        &delayLable,
+        &preDelayDecreaseBtn,
+        &preDelayIncreaseBtn};
 // delayMenu UIItems
-char   lpreDelaymnu[] = "  pre";
+char lpreDelaymnu[] = "  pre";
 UIItem preDelayMenuLabel(lpreDelaymnu);
 // char lCounter[] = "00000";
 char *indicatePreDelayTime()
 {
     intToDisplayChar(preDelayTime, lCounter, LEFT_JUSTIFY);
-    return(lCounter);
+    return (lCounter);
 }
 
-UIItem  preDelayIndicator(lCounter, indicatePreDelayTime);                                                //TODO sprintf function
+UIItem preDelayIndicator(lCounter, indicatePreDelayTime); //TODO sprintf function
 UIItem *preDelayMenuUIItems[2] = {
     &preDelayMenuLabel,
-    &preDelayIndicator
-};
-Menu    preDelayMenu
-(
+    &preDelayIndicator};
+Menu preDelayMenu(
     preDelayMenuItems,
     preDelayMenuUIItems,
-    &lcd
-);
+    &lcd);
 
 // 10 - focusdelay ------------------------------------
 void decreaseFocusDelay()
@@ -818,40 +805,36 @@ void increaseFocusDelay()
     focusDelayTime += 100;
 }
 
-MenuItem  focusDelayIncreaseBtn(lPLUS, increaseFocusDelay, CLICKABLE, AUTOCLICKABLE);
+MenuItem focusDelayIncreaseBtn(lPLUS, increaseFocusDelay, CLICKABLE, AUTOCLICKABLE);
 MenuItem *focusDelayMenuItems[4] =
-{
-    &bactkToDelayMenuBtn,
-    &delayLable,
-    &focusDelayDecreaseBtn,
-    &focusDelayIncreaseBtn
-};
+    {
+        &bactkToDelayMenuBtn,
+        &delayLable,
+        &focusDelayDecreaseBtn,
+        &focusDelayIncreaseBtn};
 // delayMenu UIItems
 char lfocusDelayAF[] = "AF   ";
 char lfocusDelayMF[] = "MF   ";
 char *switchAFMF()
 {
-    return((focusDelayTime > 0) ? lfocusDelayAF : lfocusDelayMF);
+    return ((focusDelayTime > 0) ? lfocusDelayAF : lfocusDelayMF);
 }
 
 UIItem focusDelayMenuLabel(lfocusDelayAF, switchAFMF);
 char *indicateFocusDelayTime()
 {
     intToDisplayChar(focusDelayTime, lCounter, LEFT_JUSTIFY);
-    return(lCounter);
+    return (lCounter);
 }
 
-UIItem  focusDelayIndicator(lCounter, indicateFocusDelayTime);                                                //TODO sprintf function
+UIItem focusDelayIndicator(lCounter, indicateFocusDelayTime); //TODO sprintf function
 UIItem *focusDelayMenuUIItems[2] = {
     &focusDelayMenuLabel,
-    &focusDelayIndicator
-};
-Menu    focusDelayMenu
-(
+    &focusDelayIndicator};
+Menu focusDelayMenu(
     focusDelayMenuItems,
     focusDelayMenuUIItems,
-    &lcd
-);
+    &lcd);
 
 // 11 shutterDelay ------------------------------------
 void decreaseShutterDelay()
@@ -866,36 +849,30 @@ void increaseShutterDelay()
     shutterDelayTime += 100;
 }
 
-MenuItem  shutterDelayIncreaseBtn(lPLUS, increaseShutterDelay, CLICKABLE, AUTOCLICKABLE);
+MenuItem shutterDelayIncreaseBtn(lPLUS, increaseShutterDelay, CLICKABLE, AUTOCLICKABLE);
 MenuItem *shutterDelayMenuItems[4] =
-{
-    &bactkToDelayMenuBtn,
-    &delayLable,
-    &shutterDelayDecreaseBtn,
-    &shutterDelayIncreaseBtn
-};
+    {
+        &bactkToDelayMenuBtn,
+        &delayLable,
+        &shutterDelayDecreaseBtn,
+        &shutterDelayIncreaseBtn};
 // delayMenu UIItems
-char   lshutterDelaymnu[] = "shutter";
+char lshutterDelaymnu[] = "shutter";
 UIItem shutterDelayMenuLabel(lshutterDelaymnu);
 char *indicateShutterDelayTime()
 {
     intToDisplayChar(shutterDelayTime, lCounter, LEFT_JUSTIFY);
-    return(lCounter);
+    return (lCounter);
 }
 
-UIItem  shutterDelayIndicator(lCounter, indicateShutterDelayTime);                                                //TODO sprintf function
+UIItem shutterDelayIndicator(lCounter, indicateShutterDelayTime); //TODO sprintf function
 UIItem *shutterDelayMenuUIItems[2] = {
     &shutterDelayMenuLabel,
-    &shutterDelayIndicator
-};
-Menu    shutterDelayMenu
-(
+    &shutterDelayIndicator};
+Menu shutterDelayMenu(
     shutterDelayMenuItems,
     shutterDelayMenuUIItems,
-    &lcd
-);
-
-
+    &lcd);
 
 // --------------------------------------------------------------------------------------------------------------------------
 Menu *allTheMenus[13] = {
@@ -917,13 +894,13 @@ Menu *allTheMenus[13] = {
 void setup()
 {
     motorSpeed = 0;
-    Serial.begin(9600);     //debug
+    Serial.begin(9600); //debug
     // motor contreol stuff
     leadingEdge = true;
-    stepNumber  = 0;
-    stepTarget  = stepsPerRev / shotsPerRev;
-    pinMode(BUTTON_ADC_PIN, INPUT);        //ensure A0 is an input
-    digitalWrite(BUTTON_ADC_PIN, LOW);     //ensure pullup is off on A0
+    stepNumber = 0;
+    stepTarget = stepsPerRev / shotsPerRev;
+    pinMode(BUTTON_ADC_PIN, INPUT);    //ensure A0 is an input
+    digitalWrite(BUTTON_ADC_PIN, LOW); //ensure pullup is off on A0
     //lcd backlight control
     digitalWrite(LCD_BACKLIGHT_PIN, HIGH); //backlight control pin D10 is high (on)
     pinMode(LCD_BACKLIGHT_PIN, OUTPUT);    //D10 is an output
@@ -933,11 +910,12 @@ void setup()
     pinMode(SHUTTER_PIN, OUTPUT);
 
     lcd.begin(16, 2);
-    motorSpeed  = 0.0;
+    motorSpeed = 0.0;
     targetSpeed = 0.0;
     shotsPerRev = 10;
     currentShot = 0;
     setupTimer();
+    digitalWrite(ENABLE_PIN, DISABLE);
 }
 
 void loop()
@@ -952,15 +930,16 @@ void loop()
     }
     if (buttonAutoClicked)
     {
-        Serial.println("autoclicked" + String(button));//debug
+        Serial.println("autoclicked" + String(button)); //debug
         allTheMenus[currentMenu]->autoclick(button);
     }
     // set some control variables
     accelerationIncrement = maxSpeed / rampSteps;
-    minInterruptsPerStep  = 1 / (stepsPerSecond * 2 * interruptDuration);
+    minInterruptsPerStep = 1 / (stepsPerSecond * 2 * interruptDuration);
 
     if (motorSpeed > 0 || targetSpeed > 0)
     {
+        digitalWrite(ENABLE_PIN, ENABLE);
         if (motorSpeed < targetSpeed)
         {
             motorState = ACCELERATING;
@@ -1013,6 +992,9 @@ void loop()
     // Serial.print(stepNumber);
     // Serial.print(" Shot:");
     // Serial.println(currentShot);
+    if (operationState == STOPPED){
+        digitalWrite(ENABLE_PIN, DISABLE);
+    }
 }
 
 // timer interrupt handler - where the business logic happens
@@ -1034,7 +1016,7 @@ ISR(TIMER1_COMPA_vect)
                 // make sure we don't overshoot - shouldn't happen
                 if (stepNumber >= stepTarget)
                 {
-                    motorSpeed  = 0;
+                    motorSpeed = 0;
                     targetSpeed = 0;
                 }
             }
@@ -1064,12 +1046,12 @@ ISR(TIMER1_COMPA_vect)
         motorState = STOPPED;
         digitalWrite(STEP_PIN, LOW);
     }
-    OCR1A = minInterruptsPerStep + (stepDiff * (maxSpeed - motorSpeed) / maxSpeed);     //stepDiff = maxInterruptsPerStep - minInterruptsPerStep
+    OCR1A = minInterruptsPerStep + (stepDiff * (maxSpeed - motorSpeed) / maxSpeed); //stepDiff = maxInterruptsPerStep - minInterruptsPerStep
 }
 
 void manRun()
 {
-    targetSpeed    = maxSpeed;
+    targetSpeed = maxSpeed;
     operationState = RUNNING_MAN;
 }
 
@@ -1077,7 +1059,7 @@ void takeShot()
 {
     takingShot = true;
     allTheMenus[currentMenu]->display();
-    Serial.println("Taking shot");     //TODO
+    Serial.println("Taking shot"); //TODO
     delay(preDelayTime);
     if (focusDelayTime > 0)
     {
@@ -1096,11 +1078,11 @@ byte readButtons()
 {
     unsigned int buttonVoltage;
     unsigned int longPressCount;
-    byte         button = BUTTON_NONE; // return no button pressed if the below checks don't write to btn
+    byte button = BUTTON_NONE; // return no button pressed if the below checks don't write to btn
 
-    buttonJustPressed  = false;
+    buttonJustPressed = false;
     buttonJustReleased = false;
-    buttonAutoClicked  = false;
+    buttonAutoClicked = false;
     //read the button ADC pin voltage
     buttonVoltage = analogRead(BUTTON_ADC_PIN);
     //sense if the voltage falls within valid voltage windows
@@ -1136,7 +1118,7 @@ byte readButtons()
         if ((buttonWas == BUTTON_NONE))
         {
             buttonJustPressed = true;
-            btnPressMillis    = millis(); // reset button hold counter
+            btnPressMillis = millis(); // reset button hold counter
         }
         // button being held down
         else if (buttonWas == button)
@@ -1149,7 +1131,7 @@ byte readButtons()
                 {
                     Serial.println("autoclicked: " + String(button));
                     buttonAutoClicked = true;
-                    lastAutoPressMs   = millis();
+                    lastAutoPressMs = millis();
                 }
             }
         }
@@ -1160,7 +1142,7 @@ byte readButtons()
         buttonJustReleased = true;
     }
     buttonWas = button;
-    return(button);
+    return (button);
 }
 
 void setupTimer()

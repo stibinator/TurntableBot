@@ -9,7 +9,8 @@
                 "C:/Program Files (x86)/Arduino/hardware/tools/avr/avr/include/",
                 "C:/Program Files (x86)/Arduino/",
                 "C:/Program Files (x86)/Arduino/libraries/LiquidCrystal/src/",
-                "${home}/Creative Cloud Files/Development/Arduino/turntablebot/"
+                "${home}/Creative Cloud Files/Development/Arduino/turntablebot/",
+                "C:/Program Files (x86)/Arduino/hardware/arduino/avr/variants/leonardo"
             ],
             "defines": [
                 "_DEBUG",
