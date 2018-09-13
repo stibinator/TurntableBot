@@ -119,8 +119,8 @@ byte button = BUTTON_NONE;
 unsigned long btnPressMillis = 0;  //time the last button was pressed
 unsigned long btnHoldTime = 0;     //how long the button has been held for
 unsigned long lastAutoPressMs = 0; // counts untill next auto click
-volatile long motorSpeed = 0;      //normalised speed motor is currently at, goes from 0→1
-volatile long targetSpeed = 0;     //normalised speed motor is aiming for, goes from 0→1
+volatile long motorSpeed = 0;      //normalised speed motor is currently at, goes from 0→32767
+volatile long targetSpeed = 0;     //normalised speed motor is aiming for, goes from 0→32767
 volatile long maxSpeed = 32767;    //unit-less number
 // When interuptLoopCount == 1 interrupt every ≈ 64 µs. There are two interrupts per step
 volatile int minInterruptsPerStep;
@@ -135,6 +135,8 @@ volatile int stepTarget;
 volatile bool leadingEdge;
 volatile int accelerationIncrement;
 volatile const int stepsPerRev = 7600;
+volatile bool inchingCW = false;
+volatile bool inchingCCW = false;
 
 int currentShot = 0;
 int maxInterruptsPerStep;
@@ -917,36 +919,53 @@ Menu shutterDelayMenu(
     &lcd);
 
 // 13 inch----------------------------------------------------------------
-void inchCW()
+void startInchCW()
 {
-    targetSpeed = 0;
-    if (motorSpeed == 0)
-    {
-        digitalWrite(ENABLE_PIN, ENABLE);
-        digitalWrite(DIR_PIN, CLOCKWISE);
-        digitalWrite(STEP_PIN, HIGH);
-        delay(50);
-        digitalWrite(STEP_PIN, LOW);
-        digitalWrite(ENABLE_PIN, DISABLE);
-    }
+    digitalWrite(DIR_PIN, CLOCKWISE);
+    inchingCW = true;
+    // Serial.println("Started inching");
 }
 
-void inchCounterCW()
+void startInchCounterCW()
 {
-    targetSpeed = 0;
-    if (motorSpeed == 0)
+    digitalWrite(DIR_PIN, COUNTERCW);
+    inchingCCW = true;
+    // Serial.println("Started inching");
+}
+char lIinchCW[] = "-<-  ";
+char *updateInchCW()
+{
+    if (buttonJustReleased)
     {
-        digitalWrite(ENABLE_PIN, ENABLE);
-        digitalWrite(DIR_PIN, COUNTERCW);
-        digitalWrite(STEP_PIN, HIGH);
-        delay(50);
-        digitalWrite(STEP_PIN, LOW);
-        digitalWrite(ENABLE_PIN, DISABLE);
+        inchingCW = false;
+        // Serial.println("Stopped inching");
+        return (lCW);
     }
+    else if (inchingCW)
+    {
+        return (lIinchCW);
+    }
+    return (lCW);
 }
 
-MenuItem inchCWBtn(lCW, inchCW, CLICKABLE, AUTOCLICKABLE);
-MenuItem inchCCWBtn(lCCW, inchCounterCW, CLICKABLE, AUTOCLICKABLE);
+char lInchCCW[] = "  ->-";
+char *updateInchCCW()
+{
+    if (buttonJustReleased)
+    {
+        inchingCCW = false;
+        // Serial.println("Stopped inching");
+        return (lCCW);
+    }
+    else if (inchingCCW)
+    {
+        return (lInchCCW);
+    }
+    return (lCCW);
+}
+
+MenuItem inchCWBtn(lCW, startInchCW, updateInchCW, CLICKABLE);
+MenuItem inchCCWBtn(lCCW, startInchCounterCW, updateInchCCW, CLICKABLE);
 MenuItem *inchMenuButtons[4] = {
     &mainMenuBtn,
     &blankMI,
@@ -1196,7 +1215,15 @@ ISR(TIMER1_COMPA_vect)
         // motorSpeed == 0 && targetSpeed == 0
         motorState = STOPPED;
     }
-    OCR1A = minInterruptsPerStep + (pow(1.0 - float(motorSpeed) / float(maxSpeed), RAMP_POWER)) * stepDiff; //stepDiff = maxInterruptsPerStep - minInterruptsPerStep
+    if (inchingCW || inchingCCW)
+    {
+        OCR1A = maxInterruptsPerStep;
+        // Serial.println("Step");
+    }
+    else
+    {
+        OCR1A = minInterruptsPerStep + (pow(1.0 - float(motorSpeed) / float(maxSpeed), RAMP_POWER)) * stepDiff; //stepDiff = maxInterruptsPerStep - minInterruptsPerStep
+    }
 }
 
 void manRun()
