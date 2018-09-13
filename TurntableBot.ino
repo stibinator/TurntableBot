@@ -36,6 +36,8 @@
 #define RUNNING 2
 #define DECELERATING 3
 #define STOPPING 4
+#define INCHING_CW 5
+#define INCHING_CCW 6
 
 #define RAMP_POWER 6 //exponent of the acceleration curve
 
@@ -48,10 +50,10 @@
 // #define STEPS_PER_REV         7600
 
 //return values for readButtons()
-#define BUTTON_TOPLEFT 3     //
-#define BUTTON_TOPRIGHT 2    //
-#define BUTTON_BOTTOMLEFT 1  //
-#define BUTTON_BOTTOMRIGHT 0 //
+#define BUTTON_BOTTOMRIGHT 3 //
+#define BUTTON_BOTTOMLEFT 2  //
+#define BUTTON_TOPPRIGHT 1   //
+#define BUTTON_TOPLEFT 0     //
 #define BUTTON_SELECT 4      //
 #define BUTTON_NONE 5        //
 //some example macros with friendly labels for LCD backlight/pin control, tested and can be swapped into the example code as you like
@@ -135,8 +137,6 @@ volatile int stepTarget;
 volatile bool leadingEdge;
 volatile int accelerationIncrement;
 volatile const int stepsPerRev = 7600;
-volatile bool inchingCW = false;
-volatile bool inchingCCW = false;
 
 int currentShot = 0;
 int maxInterruptsPerStep;
@@ -169,6 +169,7 @@ void toggleAutoRun()
         // take first shot
         takeShot();
         digitalWrite(ENABLE_PIN, ENABLE);
+        // Serial.println("ENABLE");
         digitalWrite(DIR_PIN, direction);
         operationState = RUNNING_AUTO;
         stepTarget = stepsPerRev / shotsPerRev;
@@ -442,7 +443,7 @@ MenuItem *motorMenuButtons[4] =
         &speedMenuBtn,
         &accelMenuBtn};
 // motorMenu UIItems
-char lmotor[] = "motor";
+char lmotor[] = "mot  ";
 UIItem motorMenuLabel(lmotor);
 UIItem *motorMenuUIItems[2] = {
     &motorMenuLabel,
@@ -582,7 +583,7 @@ UIItem shotsMenuLabel(lshotsmnu);
 UIItem shotsIndicatorUI(lCounter, []() {
     intToDisplayChar(shotsPerRev, lCounter, LEFT_JUSTIFY);
     return (lCounter);
-}); //TODO sprintf function
+});
 UIItem *shotsMenuUIItems[2] = {
     &shotsMenuLabel,
     &shotsIndicatorUI};
@@ -745,7 +746,7 @@ Menu manMenu(
 
 // 9 - delaysMenu ------------------------------------
 // delaysMenu buttons
-char lPre[] = "Pre  ";
+char lPre[] = "  Pre";
 MenuItem preshotDelayMenuBtn(lPre, []() {
     currentMenu = PREDELAY_MENU;
 },
@@ -763,7 +764,7 @@ MenuItem shuttrDelayMenuBtn(lShuttr, []() {
 
 MenuItem *delaysMenuButtons[4] =
     {
-        &setupMenuBtn,
+        &backMtrBtn,
         &preshotDelayMenuBtn,
         &focusDelayMenuBtn,
         &shuttrDelayMenuBtn,
@@ -901,7 +902,7 @@ MenuItem *shutterDelayMenuItems[4] =
         &shutterDelayDecreaseBtn,
         &shutterDelayIncreaseBtn};
 // delayMenu UIItems
-char lshutterDelaymnu[] = "shutter";
+char lshutterDelaymnu[] = "shutr";
 UIItem shutterDelayMenuLabel(lshutterDelaymnu);
 char *indicateShutterDelayTime()
 {
@@ -922,14 +923,18 @@ Menu shutterDelayMenu(
 void startInchCW()
 {
     digitalWrite(DIR_PIN, CLOCKWISE);
-    inchingCW = true;
+    digitalWrite(ENABLE_PIN, ENABLE);
+    // Serial.println("ENABLE");
+    operationState = INCHING_CW;
     // Serial.println("Started inching");
 }
 
 void startInchCounterCW()
 {
     digitalWrite(DIR_PIN, COUNTERCW);
-    inchingCCW = true;
+    digitalWrite(ENABLE_PIN, ENABLE);
+    // Serial.println("ENABLE");
+    operationState = INCHING_CCW;
     // Serial.println("Started inching");
 }
 char lIinchCW[] = "-<-  ";
@@ -937,11 +942,13 @@ char *updateInchCW()
 {
     if (buttonJustReleased)
     {
-        inchingCW = false;
+        operationState = STOPPED;
+        digitalWrite(ENABLE_PIN, DISABLE);
+        // Serial.println("DISABLE3");
         // Serial.println("Stopped inching");
         return (lCW);
     }
-    else if (inchingCW)
+    else if (operationState == INCHING_CW)
     {
         return (lIinchCW);
     }
@@ -953,11 +960,13 @@ char *updateInchCCW()
 {
     if (buttonJustReleased)
     {
-        inchingCCW = false;
+        operationState = STOPPED;
+        digitalWrite(ENABLE_PIN, DISABLE);
+        // Serial.println("DISABLE4");
         // Serial.println("Stopped inching");
         return (lCCW);
     }
-    else if (inchingCCW)
+    else if (operationState == INCHING_CCW)
     {
         return (lInchCCW);
     }
@@ -1026,41 +1035,26 @@ void setup()
     byte okToReadEeprom;
     okToReadEeprom = EEPROM.read(OKTOREAD_EEPROM);
     // Serial.println(okToReadEeprom);
+    button = readButtons();
+    // Serial.begin(9600);
+    // Serial.println(button);
+    if (button != BUTTON_NONE)
+    {
+        okToReadEeprom = 0;
+        lcd.setCursor(0, 1);
+        lcd.print("Default Settings");
+    }
+
     if (okToReadEeprom == 1)
     {
+        lcd.setCursor(0, 1);
+        lcd.print("Reading EEPROM");
         stepsPerSecond = EEPROM_readInt(STEPSPERSECOND_EEPROM); //int
-        lcd.setCursor(0, 1);
-        lcd.print("Steps/sec: " + String(stepsPerSecond));
-        delay(500);
-        lcd.setCursor(0, 1);
-        lcd.print("                ");
-        preDelayTime = EEPROM_readInt(PREDELAYTIME_EEPROM); //3000;
-        lcd.setCursor(0, 1);
-        lcd.print("pre dly: " + String(preDelayTime));
-        delay(500);
-        lcd.setCursor(0, 1);
-        lcd.print("                ");
-        focusDelayTime = EEPROM_readInt(FOCUSDELAYTIME_EEPROM); //1000;
-        lcd.setCursor(0, 1);
-        lcd.print("focus dly: " + String(focusDelayTime));
-        delay(500);
-        lcd.setCursor(0, 1);
-        lcd.print("                ");
-        shutterDelayTime = EEPROM_readInt(SHUTTERDELAYTIME_EEPROM); //1000;
-        lcd.setCursor(0, 1);
-        lcd.print("shutt dly: " + String(shutterDelayTime));
-        delay(500);
-        lcd.setCursor(0, 1);
-        lcd.print("                ");
-        shotsPerRev = EEPROM_readInt(SHOTSPERREV_EEPROM); //12;
-        lcd.setCursor(0, 1);
-        lcd.print("shots/Rev: " + String(shotsPerRev));
-        delay(500);
-        lcd.setCursor(0, 1);
-        lcd.print("                ");
-        rampSteps = EEPROM_readInt(RAMPSTEPS_EEPROM); //12;
-        lcd.setCursor(0, 1);
-        lcd.print("acc steps: " + String(rampSteps));
+        preDelayTime = EEPROM_readInt(PREDELAYTIME_EEPROM);
+        focusDelayTime = EEPROM_readInt(FOCUSDELAYTIME_EEPROM);
+        shutterDelayTime = EEPROM_readInt(SHUTTERDELAYTIME_EEPROM);
+        shotsPerRev = EEPROM_readInt(SHOTSPERREV_EEPROM);
+        rampSteps = EEPROM_readInt(RAMPSTEPS_EEPROM);
     }
     else //initialise the eeprom
     {
@@ -1074,6 +1068,7 @@ void setup()
         okToReadEeprom = 1;
         EEPROM.write(OKTOREAD_EEPROM, okToReadEeprom);
     }
+    delay(1000);
     accelerationIncrement = maxSpeed / rampSteps;
     maxInterruptsPerStep = 1 / (MIN_STEPS_PER_SECOND * 2 * interruptDuration); // 8 steps/second.
     minInterruptsPerStep = 1 / (stepsPerSecond * 2 * interruptDuration);       // 500 steps/second.
@@ -1086,6 +1081,7 @@ void setup()
     stepTarget = stepsPerRev / shotsPerRev;
     setupTimer();
     digitalWrite(ENABLE_PIN, DISABLE);
+    // Serial.println("DISABLE1");
     delay(2000);
     lcd.clear();
 }
@@ -1093,7 +1089,6 @@ void setup()
 void loop()
 {
     // do some calculations
-    rampSteps = stepsPerRev / (shotsPerRev * 3);
     maxInterruptsPerStep = 1 / (MIN_STEPS_PER_SECOND * 2 * interruptDuration); // 8 steps/second.
     minInterruptsPerStep = 1 / (stepsPerSecond * 2 * interruptDuration);       // 500 steps/second.
     stepDiff = maxInterruptsPerStep - minInterruptsPerStep;
@@ -1105,6 +1100,7 @@ void loop()
     if (buttonJustPressed)
     {
         allTheMenus[currentMenu]->click(button);
+        // Serial.println(button);
     }
     if (buttonAutoClicked)
     {
@@ -1126,9 +1122,6 @@ void loop()
         {
             motorState = RUNNING;
         }
-        // Serial.print(String(motorSpeed) + " ");
-        // Serial.print(String(targetSpeed) + " ");
-        // Serial.println(OCR1A);
     }
     else
     {
@@ -1151,16 +1144,12 @@ void loop()
             else
             {
                 operationState = STOPPED;
-                digitalWrite(STEP_PIN, LOW);
             }
         }
     }
-    if (operationState == STOPPING && motorSpeed == 0 && targetSpeed == 0)
+    if ((operationState == STOPPING || operationState == STOPPED) && motorSpeed == 0 && targetSpeed == 0)
     {
         operationState = STOPPED;
-    }
-    if (operationState == STOPPED && motorSpeed == 0 && targetSpeed == 0)
-    {
         digitalWrite(ENABLE_PIN, DISABLE);
     }
 }
@@ -1199,26 +1188,32 @@ ISR(TIMER1_COMPA_vect)
             { //subtract from motorSpeed down to targetSpeed
                 motorSpeed = max(motorSpeed - accelerationIncrement, targetSpeed);
             }
-
+            // Serial.println("Leading");
             leadingEdge = false;
         }
         // trailing edge
         else
         {
             digitalWrite(STEP_PIN, LOW);
+            // Serial.println("Trailing");
             leadingEdge = true;
         }
     }
-    else
-    // not running
-    {
-        // motorSpeed == 0 && targetSpeed == 0
-        motorState = STOPPED;
-    }
-    if (inchingCW || inchingCCW)
+
+    if (operationState == INCHING_CW || operationState == INCHING_CCW)
     {
         OCR1A = maxInterruptsPerStep;
-        // Serial.println("Step");
+        if (leadingEdge)
+        {
+            digitalWrite(STEP_PIN, HIGH);
+            // Serial.println("Leading");
+        }
+        else
+        {
+            digitalWrite(STEP_PIN, LOW);
+            // Serial.println("Trailing");
+        }
+        leadingEdge = !leadingEdge;
     }
     else
     {
@@ -1264,22 +1259,22 @@ byte readButtons()
     //sense if the voltage falls within valid voltage windows
     if (buttonVoltage < (RIGHT_10BIT_ADC + BUTTONHYSTERESIS))
     {
-        button = BUTTON_TOPLEFT;
+        button = BUTTON_BOTTOMRIGHT;
     }
     else if (buttonVoltage >= (UP_10BIT_ADC - BUTTONHYSTERESIS) &&
              buttonVoltage <= (UP_10BIT_ADC + BUTTONHYSTERESIS))
     {
-        button = BUTTON_TOPRIGHT;
+        button = BUTTON_BOTTOMLEFT;
     }
     else if (buttonVoltage >= (DOWN_10BIT_ADC - BUTTONHYSTERESIS) &&
              buttonVoltage <= (DOWN_10BIT_ADC + BUTTONHYSTERESIS))
     {
-        button = BUTTON_BOTTOMLEFT;
+        button = BUTTON_TOPPRIGHT;
     }
     else if (buttonVoltage >= (LEFT_10BIT_ADC - BUTTONHYSTERESIS) &&
              buttonVoltage <= (LEFT_10BIT_ADC + BUTTONHYSTERESIS))
     {
-        button = BUTTON_BOTTOMRIGHT;
+        button = BUTTON_TOPLEFT;
     }
     else if (buttonVoltage >= (SELECT_10BIT_ADC - BUTTONHYSTERESIS) &&
              buttonVoltage <= (SELECT_10BIT_ADC + BUTTONHYSTERESIS))
