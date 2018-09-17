@@ -30,6 +30,14 @@
 #define SELECT_10BIT_ADC 640 // right
 #define BUTTONHYSTERESIS 40  // hysteresis for valid button sensing window
 
+//return values for readButtons()
+#define BUTTON_BOTTOMRIGHT 3 //
+#define BUTTON_BOTTOMLEFT 2  //
+#define BUTTON_TOPRIGHT 1   //
+#define BUTTON_TOPLEFT 0     //
+#define BUTTON_SELECT 4      //
+#define BUTTON_NONE 5        //
+
 // motorState constants
 #define STOPPED 0 //also used as operation state
 #define ACCELERATING 1
@@ -48,14 +56,6 @@
 
 // #define STEPS_PER_DEGREE 21.1111 // 76 * 100 / 360
 // #define STEPS_PER_REV         7600
-
-//return values for readButtons()
-#define BUTTON_BOTTOMRIGHT 3 //
-#define BUTTON_BOTTOMLEFT 2  //
-#define BUTTON_TOPPRIGHT 1   //
-#define BUTTON_TOPLEFT 0     //
-#define BUTTON_SELECT 4      //
-#define BUTTON_NONE 5        //
 //some example macros with friendly labels for LCD backlight/pin control, tested and can be swapped into the example code as you like
 #define LCD_BACKLIGHT_OFF() digitalWrite(LCD_BACKLIGHT_PIN, LOW)
 #define LCD_BACKLIGHT_ON() digitalWrite(LCD_BACKLIGHT_PIN, HIGH)
@@ -93,7 +93,7 @@
 #define AUTOCLICKABLE true
 #define LEFT_JUSTIFY true
 #define RIGHT_JUSTIFY false
-#define MAX_STEPS_PER_SECOND 600
+#define MAX_STEPS_PER_SECOND 1200
 #define MIN_STEPS_PER_SECOND 8
 
 #define BUTTON_LONG_PRESS 1000
@@ -136,13 +136,13 @@ volatile int stepNumber;
 volatile int stepTarget;
 volatile bool leadingEdge;
 volatile int accelerationIncrement;
-volatile const int stepsPerRev = 7600;
+volatile const int stepsPerRev = 19800;
 
 int currentShot = 0;
 int maxInterruptsPerStep;
 
 // these values get stored in the EEPROM
-int stepsPerSecond = 400; //the max speed of the stepper
+int stepsPerSecond = 800; //the max speed of the stepper
 int preDelayTime = 2000;
 int focusDelayTime = 1000;
 int shutterDelayTime = 1000;
@@ -1269,7 +1269,7 @@ byte readButtons()
     else if (buttonVoltage >= (DOWN_10BIT_ADC - BUTTONHYSTERESIS) &&
              buttonVoltage <= (DOWN_10BIT_ADC + BUTTONHYSTERESIS))
     {
-        button = BUTTON_TOPPRIGHT;
+        button = BUTTON_TOPRIGHT;
     }
     else if (buttonVoltage >= (LEFT_10BIT_ADC - BUTTONHYSTERESIS) &&
              buttonVoltage <= (LEFT_10BIT_ADC + BUTTONHYSTERESIS))
