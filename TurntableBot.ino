@@ -33,7 +33,7 @@
 //return values for readButtons()
 #define BUTTON_BOTTOMRIGHT 3 //
 #define BUTTON_BOTTOMLEFT 2  //
-#define BUTTON_TOPRIGHT 1   //
+#define BUTTON_TOPRIGHT 1    //
 #define BUTTON_TOPLEFT 0     //
 #define BUTTON_SELECT 4      //
 #define BUTTON_NONE 5        //
@@ -136,6 +136,7 @@ volatile int stepNumber;
 volatile int stepTarget;
 volatile bool leadingEdge;
 volatile int accelerationIncrement;
+volatile float relativeSpeed;
 volatile const int stepsPerRev = 19800;
 
 int currentShot = 0;
@@ -1217,7 +1218,9 @@ ISR(TIMER1_COMPA_vect)
     }
     else
     {
-        OCR1A = minInterruptsPerStep + (pow(1.0 - float(motorSpeed) / float(maxSpeed), RAMP_POWER)) * stepDiff; //stepDiff = maxInterruptsPerStep - minInterruptsPerStep
+        relativeSpeed = float(motorSpeed) / float(maxSpeed);
+        // OCR1A = minInterruptsPerStep * (pow(float(motorSpeed) / float(maxSpeed), RAMP_POWER)) + (pow(1.0 - float(motorSpeed) / float(maxSpeed), RAMP_POWER)) * maxInterruptsPerStep; //stepDiff = maxInterruptsPerStep - minInterruptsPerStep
+        OCR1A = minInterruptsPerStep * relativeSpeed + (1.0 - relativeSpeed) * maxInterruptsPerStep; //stepDiff = maxInterruptsPerStep - minInterruptsPerStep
     }
 }
 
