@@ -47,7 +47,7 @@
 #define INCHING_CW 5
 #define INCHING_CCW 6
 
-#define RAMP_POWER 0.25 //exponent of the acceleration curve
+#define RAMP_POWER 0.2 //exponent of the acceleration curve
 
 // operation state constants
 // #define STOPPED              0 //defined already
@@ -81,7 +81,7 @@
 #define MOTOR_MENU 4
 #define SPEED_MENU 5
 #define ACCEL_MENU 6
-#define SHOTS_MENU 7
+#define STEPS_MENU 7
 #define MANUAL_MENU 8
 #define DELAYS_MENU 9
 #define PREDELAY_MENU 10
@@ -109,6 +109,7 @@
 #define SHUTTERDELAYTIME_EEPROM 7 // two bytes
 #define SHOTSPERREV_EEPROM 9      // two bytes
 #define RAMPSTEPS_EEPROM 11       // two bytes
+#define STEPSPERREV_EEPROM 12
 
 /*--------------------------------------------------------------------------------------
  *  Variables
@@ -137,7 +138,7 @@ volatile int stepTarget;
 volatile bool leadingEdge;
 volatile int accelerationIncrement;
 volatile float relativeSpeed;
-volatile const int stepsPerRev = 19800;
+volatile int stepsPerRev = 19800;
 
 int currentShot = 0;
 int maxInterruptsPerStep;
@@ -186,15 +187,16 @@ void toggleAutoRun()
 {
     if (operationState == STOPPED)
     {
+        currentShot = 0;
         // take first shot
         takeShot();
+        // currentShot now == 1
         digitalWrite(ENABLE_PIN, ENABLE);
         // Serial.println("ENABLE");
         digitalWrite(DIR_PIN, direction);
         operationState = RUNNING_AUTO;
         stepTarget = stepsPerRev / shotsPerRev;
         stepNumber = 0;
-        currentShot = 0;
         targetSpeed = maxSpeed;
     }
     else
@@ -244,6 +246,8 @@ void intToDisplayChar(int theInt, char theChars[STRING_LENGTH], bool justify)
 // blank menuItem
 MenuItem blankMI;
 UIItem blankUII;
+char lMINUS[] = "[-]  ";
+char lPLUS[] = "  [+]";
 // 0 - runMenu ------------------------------------
 // runMenu buttons
 void gotoMainMenuIfNotRunning()
@@ -272,22 +276,58 @@ char *updateStartBtn()
 }
 
 MenuItem startBtn(lSTART, toggleAutoRun, updateStartBtn, CLICKABLE);
-char lShotCount[] = "    0";
+
+void increaseShots()
+{
+
+    if (operationState == STOPPED)
+    {
+        shotsPerRev = max(shotsPerRev + 1, 1);
+        EEPROM_writeInt(SHOTSPERREV_EEPROM, shotsPerRev);
+        /* code */    }
+}
+
+void decreaseShots()
+{
+    if (operationState == STOPPED)
+    {
+        shotsPerRev = min(shotsPerRev - 1, stepsPerRev);
+        EEPROM_writeInt(SHOTSPERREV_EEPROM, shotsPerRev);
+    }
+}
+char shotCountString[] = "     ";
+char lShotCount[] = "-   0";
+const char *  minusSign = "-";
+const char *  plusSign = "+";
+const char *  space = " ";
 char *countShots()
 {
-    intToDisplayChar(currentShot, lShotCount, RIGHT_JUSTIFY);
+    intToDisplayChar(currentShot, shotCountString, RIGHT_JUSTIFY);
+    lShotCount[0] = (operationState == STOPPED) ? * minusSign : * space;
+    for (byte i = 1; i < STRING_LENGTH - 1; i++)
+    {
+        lShotCount[i] = shotCountString[i];
+    }
     return (lShotCount);
 }
 
-MenuItem shotCounter(lShotCount, countShots);
-char lCounter[] = "00000";
+// MenuItem increaseShotsBtn(lMINUS, increaseShots, CLICKABLE, AUTOCLICKABLE);
+MenuItem shotCounter(lShotCount, decreaseShots, countShots, CLICKABLE, AUTOCLICKABLE);
+//  lPlus == "  [+]";
+char shotsperRevString[] = "     ";
+char lCounter[] = "    +";
 char *shotsIndicate()
 {
-    intToDisplayChar(shotsPerRev, lCounter, LEFT_JUSTIFY);
+    intToDisplayChar(shotsPerRev, shotsperRevString, LEFT_JUSTIFY);
+    for (byte i = 0; i < STRING_LENGTH - 2; i++)
+    {
+        lCounter[i] = shotsperRevString[i];
+    }
+    lCounter[STRING_LENGTH - 2] = (operationState == STOPPED) ? * plusSign : * space;
     return (lCounter);
 }
 
-MenuItem shotsIndicator(lCounter, shotsIndicate);
+MenuItem shotsIndicator(lCounter, increaseShots, shotsIndicate, CLICKABLE, AUTOCLICKABLE);
 MenuItem *runMenuButtons[4] =
     {
         &mainMenuBtn,
@@ -310,7 +350,9 @@ char *motorIndicate()
 
 UIItem motorStateIndicator(motorIndicatorFrames[0], motorIndicate);
 char lSlash[] = "  /  ";
+
 UIItem slash(lSlash);
+
 UIItem *runMenuUIItems[2] =
     {
         &motorStateIndicator,
@@ -371,9 +413,9 @@ MenuItem directionMenuBtn(lDir, []() {
     currentMenu = DIRECTION_MENU;
 },
                           CLICKABLE);
-char lSteps[] = "Shots";
+char lSteps[] = "Steps";
 MenuItem stepsMenuBtn(lSteps, []() {
-    currentMenu = SHOTS_MENU;
+    currentMenu = STEPS_MENU;
 },
                       CLICKABLE);
 
@@ -480,7 +522,7 @@ MenuItem backMtrBtn(lBack, []() {
     currentMenu = MOTOR_MENU;
 },
                     CLICKABLE);
-char lMINUS[] = "[-]  ";
+
 void maxSpeedDecrease()
 {
     stepsPerSecond = max(MIN_STEPS_PER_SECOND, stepsPerSecond - 1);
@@ -489,7 +531,6 @@ void maxSpeedDecrease()
 
 MenuItem slowDownBtn(lMINUS, maxSpeedDecrease, CLICKABLE, AUTOCLICKABLE);
 
-char lPLUS[] = "  [+]";
 void increaseMaxSpeed()
 {
     stepsPerSecond = min(MAX_STEPS_PER_SECOND, stepsPerSecond + 1);
@@ -569,47 +610,46 @@ Menu accelMenu(
     accelMenuUIItems,
     &lcd);
 
-// 7 - shots ------------------------------------
-// shotsMenu buttons
+// 7 - steps ------------------------------------
+// stepsMenu buttons
 // char lBack[] = "<Back";
 // MenuItem backMtrBtn(lBack, [](){currentMenu = MOTOR_MENU;}, CLICKABLE);
+void increaseSteps()
+{
+    stepsPerRev += 1;
+    EEPROM_writeInt(STEPSPERREV_EEPROM, stepsPerRev);
+}
+
+void decreaseSteps()
+{
+    stepsPerRev = max(stepsPerRev - 1, 76);
+    EEPROM_writeInt(STEPSPERREV_EEPROM, stepsPerRev);
+}
 // char lMINUS[] = "[ - ]";
-void increaseShots()
-{
-    shotsPerRev = max(shotsPerRev - 1, 1);
-    EEPROM_writeInt(SHOTSPERREV_EEPROM, shotsPerRev);
-}
-
-MenuItem increaseShotsBtn(lMINUS, increaseShots, CLICKABLE, AUTOCLICKABLE);
 // char lPLUS[] = "[ + ]";
-void shotsDecrease()
-{
-    shotsPerRev = min(shotsPerRev + 1, stepsPerRev);
-    EEPROM_writeInt(SHOTSPERREV_EEPROM, shotsPerRev);
-}
+MenuItem increaseStepsBtn(lMINUS, decreaseSteps, CLICKABLE, AUTOCLICKABLE);
+MenuItem decreaseStepsBtn(lPLUS, increaseSteps, CLICKABLE, AUTOCLICKABLE);
 
-MenuItem shotsDecreaseBtn(lPLUS, shotsDecrease, CLICKABLE, AUTOCLICKABLE);
-
-MenuItem *shotsMenuButtons[4] =
+MenuItem *stepsMenuButtons[4] =
     {
         &backSetupBtn,
         &blankMI,
-        &increaseShotsBtn,
-        &shotsDecreaseBtn};
-// shotsMenu UIItems
-char lshotsmnu[] = "shots";
-UIItem shotsMenuLabel(lshotsmnu);
+        &increaseStepsBtn,
+        &decreaseStepsBtn};
+// stepsMenu UIItems
+char lstepsmnu[] = "steps";
+UIItem stepsMenuLabel(lstepsmnu);
 // char   lCounter[] = "00000";
-UIItem shotsIndicatorUI(lCounter, []() {
-    intToDisplayChar(shotsPerRev, lCounter, LEFT_JUSTIFY);
+UIItem stepsIndicatorUI(lCounter, []() {
+    intToDisplayChar(stepsPerRev, lCounter, LEFT_JUSTIFY);
     return (lCounter);
 });
-UIItem *shotsMenuUIItems[2] = {
-    &shotsMenuLabel,
-    &shotsIndicatorUI};
-Menu shotsMenu(
-    shotsMenuButtons,
-    shotsMenuUIItems,
+UIItem *stepsMenuUIItems[2] = {
+    &stepsMenuLabel,
+    &stepsIndicatorUI};
+Menu stepsMenu(
+    stepsMenuButtons,
+    stepsMenuUIItems,
     &lcd);
 
 // 8 - manMenu ------------------------------------
@@ -1149,7 +1189,7 @@ void setup()
     allTheMenus[MOTOR_MENU] = &motorMenu;
     allTheMenus[SPEED_MENU] = &speedMenu;
     allTheMenus[ACCEL_MENU] = &accelMenu;
-    allTheMenus[SHOTS_MENU] = &shotsMenu;
+    allTheMenus[STEPS_MENU] = &stepsMenu;
     allTheMenus[MANUAL_MENU] = &manMenu;
     allTheMenus[DELAYS_MENU] = &delaysMenu;
     allTheMenus[PREDELAY_MENU] = &preDelayMenu;
@@ -1157,69 +1197,70 @@ void setup()
     allTheMenus[SHUTTERDELAY_MENU] = &shutterDelayMenu;
     allTheMenus[INCH_MENU] = &inchMenu;
 
+    lcd.begin(16, 2);
 
-lcd.begin(16, 2);
+    for (byte i = 16; i > 0; i--)
+    {
+        lcd.setCursor(i - 1, 0);
+        lcd.print("ROTATATRON 2000 ");
+        delay(200);
+    }
 
-for (byte i = 16; i > 0; i--)
-{
-    lcd.setCursor(i - 1, 0);
-    lcd.print("ROTATATRON 2000 ");
-    delay(200);
-}
+    // read stuff from eeprom
+    byte okToReadEeprom;
+    okToReadEeprom = EEPROM.read(OKTOREAD_EEPROM);
+    // Serial.println(okToReadEeprom);
+    button = readButtons();
+    // Serial.begin(9600);
+    // Serial.println(button);
+    if (button != BUTTON_NONE)
+    {
+        okToReadEeprom = 0;
+        lcd.setCursor(0, 1);
+        lcd.print("Default Settings");
+    }
 
-// read stuff from eeprom
-byte okToReadEeprom;
-okToReadEeprom = EEPROM.read(OKTOREAD_EEPROM);
-// Serial.println(okToReadEeprom);
-button = readButtons();
-// Serial.begin(9600);
-// Serial.println(button);
-if (button != BUTTON_NONE)
-{
-    okToReadEeprom = 0;
-    lcd.setCursor(0, 1);
-    lcd.print("Default Settings");
-}
-
-if (okToReadEeprom == 1)
-{
-    lcd.setCursor(0, 1);
-    lcd.print("Reading EEPROM");
-    stepsPerSecond = EEPROM_readInt(STEPSPERSECOND_EEPROM); //int
-    preDelayTime = EEPROM_readInt(PREDELAYTIME_EEPROM);
-    focusDelayTime = EEPROM_readInt(FOCUSDELAYTIME_EEPROM);
-    shutterDelayTime = EEPROM_readInt(SHUTTERDELAYTIME_EEPROM);
-    shotsPerRev = EEPROM_readInt(SHOTSPERREV_EEPROM);
-    rampSteps = EEPROM_readInt(RAMPSTEPS_EEPROM);
-}
-else //initialise the eeprom
-{
-    EEPROM_writeInt(STEPSPERSECOND_EEPROM, stepsPerSecond);     //int
-    EEPROM_writeInt(PREDELAYTIME_EEPROM, preDelayTime);         //3000;
-    EEPROM_writeInt(FOCUSDELAYTIME_EEPROM, focusDelayTime);     //1000;
-    EEPROM_writeInt(SHUTTERDELAYTIME_EEPROM, shutterDelayTime); //1000;
-    EEPROM_writeInt(SHOTSPERREV_EEPROM, shotsPerRev);           //12;
-    rampSteps = stepsPerRev / (shotsPerRev * 3);
-    EEPROM_writeInt(RAMPSTEPS_EEPROM, rampSteps);
-    okToReadEeprom = 1;
-    EEPROM.write(OKTOREAD_EEPROM, okToReadEeprom);
-}
-delay(1000);
-accelerationIncrement = maxSpeed / rampSteps;
-maxInterruptsPerStep = 1 / (MIN_STEPS_PER_SECOND * 2 * interruptDuration); // 8 steps/second.
-minInterruptsPerStep = 1 / (stepsPerSecond * 2 * interruptDuration);       // 500 steps/second.
-stepDiff = maxInterruptsPerStep - minInterruptsPerStep;
-// motor contreol stuff
-motorSpeed = 0;
-leadingEdge = true;
-stepNumber = 0;
-currentShot = 0;
-stepTarget = stepsPerRev / shotsPerRev;
-setupTimer();
-digitalWrite(ENABLE_PIN, DISABLE);
-// Serial.println("DISABLE1");
-delay(2000);
-lcd.clear();
+    if (okToReadEeprom == 1)
+    {
+        lcd.setCursor(0, 1);
+        lcd.print("Reading EEPROM");
+        stepsPerSecond = EEPROM_readInt(STEPSPERSECOND_EEPROM); //int
+        preDelayTime = EEPROM_readInt(PREDELAYTIME_EEPROM);
+        focusDelayTime = EEPROM_readInt(FOCUSDELAYTIME_EEPROM);
+        shutterDelayTime = EEPROM_readInt(SHUTTERDELAYTIME_EEPROM);
+        shotsPerRev = EEPROM_readInt(SHOTSPERREV_EEPROM);
+        rampSteps = EEPROM_readInt(RAMPSTEPS_EEPROM);
+        stepsPerRev = EEPROM_readInt(STEPSPERREV_EEPROM);
+    }
+    else //initialise the eeprom
+    {
+        EEPROM_writeInt(STEPSPERSECOND_EEPROM, stepsPerSecond);     //int
+        EEPROM_writeInt(PREDELAYTIME_EEPROM, preDelayTime);         //3000;
+        EEPROM_writeInt(FOCUSDELAYTIME_EEPROM, focusDelayTime);     //1000;
+        EEPROM_writeInt(SHUTTERDELAYTIME_EEPROM, shutterDelayTime); //1000;
+        EEPROM_writeInt(SHOTSPERREV_EEPROM, shotsPerRev);           //12;
+        EEPROM_writeInt(STEPSPERREV_EEPROM, stepsPerRev);
+        rampSteps = stepsPerRev / (shotsPerRev * 3);
+        EEPROM_writeInt(RAMPSTEPS_EEPROM, rampSteps);
+        okToReadEeprom = 1;
+        EEPROM.write(OKTOREAD_EEPROM, okToReadEeprom);
+    }
+    delay(1000);
+    accelerationIncrement = maxSpeed / rampSteps;
+    maxInterruptsPerStep = 1 / (MIN_STEPS_PER_SECOND * 2 * interruptDuration); // 8 steps/second.
+    minInterruptsPerStep = 1 / (stepsPerSecond * 2 * interruptDuration);       // 500 steps/second.
+    stepDiff = maxInterruptsPerStep - minInterruptsPerStep;
+    // motor contreol stuff
+    motorSpeed = 0;
+    leadingEdge = true;
+    stepNumber = 0;
+    currentShot = 0;
+    stepTarget = stepsPerRev / shotsPerRev;
+    setupTimer();
+    digitalWrite(ENABLE_PIN, DISABLE);
+    // Serial.println("DISABLE1");
+    delay(2000);
+    lcd.clear();
 }
 
 void loop()
